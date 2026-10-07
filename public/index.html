@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-row">
+    <h1>Agent Hub</h1>
+    <p class="top-meta"><span id="needs-summary"></span><span id="refreshed"></span></p>
+  </div>
+</header>
+<main class="wrap">
+  <section class="block" id="add-block">
+    <details id="add-details">
+      <summary><h2>Add project</h2></summary>
+      <form id="add-form" class="add-form">
+        <label>Project folder <input type="text" name="folder" required placeholder="/Users/you/Projects/my-app (created if missing)"></label>
+        <label>Project name <input type="text" name="project" placeholder="Defaults to the folder name"></label>
+        <label>Agents <input type="text" name="agents" value="lead, builder" placeholder="lead, builder, designer"></label>
+        <label>Brief <textarea name="brief" rows="8" placeholder="What the app is, who it is for, must-have features, what is out of scope, deadline. The lead agent turns this into a plan and asks you to approve it."></textarea></label>
+        <div class="actions"><button class="btn primary" type="submit">Connect project</button></div>
+        <p class="error" id="add-error" hidden></p>
+      </form>
+      <div id="add-result" hidden></div>
+    </details>
+  </section>
+  <section class="block" id="agents-block">
+    <h2>Agents</h2>
+    <div id="agents" class="agents"></div>
+  </section>
+  <section class="block" id="projects-block">
+    <h2>Projects</h2>
+    <div id="projects" class="projects"></div>
+  </section>
+  <form class="filters" id="filters" aria-label="Filters">
+    <label>Agent <select id="f-agent"></select></label>
+    <label>Project <select id="f-project"></select></label>
+    <label>Type <select id="f-type"></select></label>
+    <button type="button" id="f-clear" class="link">Clear</button>
+  </form>
+  <section class="block" id="needs-block">
+    <h2>Needs you <span class="badge" id="needs-count">0</span></h2>
+    <div id="needs" class="cards"></div>
+  </section>
+  <section class="block" id="deliveries-block">
+    <h2>Deliveries <span class="count" id="deliveries-count"></span></h2>
+    <div id="deliveries" class="cards"></div>
+  </section>
+  <section class="block" id="flags-block">
+    <h2>Lead agent flags <span class="count" id="flags-count"></span></h2>
+    <div id="flags" class="cards"></div>
+  </section>
+  <section class="block">
+    <h2>Feed</h2>
+    <div id="feed" class="cards"></div>
+  </section>
+  <section class="block">
+    <details id="ideas-details">
+      <summary><h2>Ideas backlog <span class="count" id="ideas-count"></span></h2></summary>
+      <p class="note" id="ideas-note"></p>
+      <div id="ideas" class="cards"></div>
+    </details>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

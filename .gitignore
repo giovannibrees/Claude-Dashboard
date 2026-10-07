@@ -1,0 +1,11 @@
+# Runtime data: your items, answers, logs and agent state stay on your machine
+inbox/*
+answers/*
+archive/*
+log/*
+agents/*
+projects/*
+directives/*
+!*/.gitkeep
+node_modules/
+.DS_Store

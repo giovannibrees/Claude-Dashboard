@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+// Wait for the CEO's answer to one item. Polls hub/answers/ every 30 seconds.
+// Exit 0 = answer printed. Exit 2 = timed out (see --timeout-hours). Exit 1 = error.
+'use strict';
+
+const path = require('path');
+const hub = require('../lib/hub');
+
+const HELP = `wait-answer: block until the answer for an item arrives
+
+Usage:
+  wait-answer <item-id> [--interval 30] [--timeout-hours 4] [--json]
+
+Prints the decision and text when the answer lands in hub/answers/<item-id>.json.
+Exit 2 on timeout. If the item is reversible and timed out, run: auto-proceed <item-id>
+Tip: do not sit in wait-answer while other work is unblocked. Run it in the background,
+or check later with: my-inbox
+`;
+
+const args = hub.parseArgs(process.argv.slice(2));
+if (args.help || !args._[0]) { process.stdout.write(HELP); process.exit(args.help ? 0 : 1); }
+const id = args._[0];
+const intervalMs = Math.max(1, Number(args.interval || 30)) * 1000;
+const timeoutMs = args.timeout_hours ? Number(args.timeout_hours) * 3600e3 : Infinity;
+const file = path.join(hub.DIRS.answers, `${id}.json`);
+const started = Date.now();
+
+const item = hub.readItem(id);
+if (!item) hub.die(`no item with id ${id}`);
+
+function check() {
+  const ans = hub.readJson(file);
+  if (ans) {
+    if (item.content_hash && ans.content_hash && ans.content_hash !== item.content_hash) {
+      hub.die('item text changed after posting; this answer does not apply. Post a new item.');
+    }
+    if (ans.agent) {
+      const st = hub.readJson(hub.agentFile(ans.agent), {});
+      const seen = new Set(st.seen_answers || []);
+      seen.add(id);
+      hub.touchAgent(ans.agent, { seen_answers: [...seen].slice(-500) });
+    }
+    if (args.json) process.stdout.write(JSON.stringify(ans, null, 2) + '\n');
+    else {
+      const lines = [`ANSWER for ${id} (${ans.title})`, `decision: ${ans.decision}`];
+      if (ans.text) lines.push(`text: ${ans.text}`);
+      if (ans.per_question) for (const [n, v] of Object.entries(ans.per_question)) lines.push(`  ${n}: ${v}`);
+      lines.push(`meaning: ${ans.meaning}`);
+      process.stdout.write(lines.join('\n') + '\n');
+    }
+    process.exit(0);
+  }
+  if (Date.now() - started >= timeoutMs) {
+    process.stderr.write(`hub: no answer for ${id} after ${args.timeout_hours}h\n`);
+    process.exit(2);
+  }
+  setTimeout(check, intervalMs);
+}
+check();

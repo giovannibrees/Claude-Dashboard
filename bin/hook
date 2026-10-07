@@ -1,0 +1,149 @@
+#!/usr/bin/env node
+// Claude Code hook for hub agents. Installed by "Add project" on the dashboard or `hub connect`.
+// Handles SessionStart, PostToolUse, PostToolUseFailure, Stop, PreCompact, SessionEnd.
+// - keeps hub/agents/<agent>.json fresh (heartbeat, last tool, edits, token totals)
+// - delivers new CEO answers and lead-agent directives into the running agent's context
+// - detects loops (same tool call repeated) for the lead agent
+// - Stop: blocks stopping while the agent still owns an in-progress task (keep-alive)
+// Disable for one agent with HUB_HOOKS=off. Never fails the agent: errors exit 0 silently.
+'use strict';
+
+const fs = require('fs');
+const crypto = require('crypto');
+const hub = require('../lib/hub');
+
+if (process.env.HUB_HOOKS === 'off') process.exit(0);
+
+let raw = '';
+process.stdin.on('data', (c) => { raw += c; });
+process.stdin.on('end', () => {
+  try { run(JSON.parse(raw || '{}')); } catch (e) {
+    try { hub.log('hook_error', { error: String(e && e.message) }); } catch { /* ignore */ }
+    process.exit(0);
+  }
+});
+
+function out(obj) { process.stdout.write(JSON.stringify(obj)); process.exit(0); }
+// Stop: exit code 2 blocks stopping and shows stderr to the agent as the reason to continue.
+function blockStop(reason) { process.stderr.write(reason + '\n'); process.exit(2); }
+
+function tokenTotals(transcript) {
+  // Sum usage once per assistant message id (a message can span several transcript lines).
+  const seen = new Map();
+  let text;
+  try { text = fs.readFileSync(transcript, 'utf8'); } catch { return null; }
+  for (const line of text.split('\n')) {
+    if (!line.includes('"usage"')) continue;
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    const m = e.message;
+    if (!m || !m.usage) continue;
+    seen.set(m.id || e.uuid, m.usage);
+  }
+  const t = { input: 0, output: 0, cache_read: 0, cache_write: 0 };
+  for (const u of seen.values()) {
+    t.input += u.input_tokens || 0;
+    t.output += u.output_tokens || 0;
+    t.cache_read += u.cache_read_input_tokens || 0;
+    t.cache_write += u.cache_creation_input_tokens || 0;
+  }
+  return t;
+}
+
+function run(ev) {
+  const me = hub.identity({}, ev.cwd || process.cwd());
+  if (!me.agent) process.exit(0); // not a hub agent
+  const name = ev.hook_event_name;
+  const st = hub.readJson(hub.agentFile(me.agent), {});
+  const base = { project: me.project, role: me.role || st.role || '', repo: me.repo || st.repo || '', session_id: ev.session_id };
+
+  if (name === 'SessionStart') {
+    const sameSession = st.session_id === ev.session_id;
+    hub.touchAgent(me.agent, { ...base, state: 'working', last_activity_at: hub.nowIso(), session_started_at: sameSession ? st.session_started_at : hub.nowIso(),
+      ...(sameSession ? {} : { tool_calls: 0, edits: 0, errors: 0, files_touched: [], loop: null }) });
+    hub.log('session_start', { agent: me.agent, project: me.project, source: ev.source || '' });
+    const lines = hub.pendingFor(me.agent, true);
+    const B = `${hub.HUB}/bin`;
+    const pr = me.project && hub.readProject(me.project);
+    const ctx = [
+      `You are hub agent "${me.agent}" (role ${me.role || 'dev'}) on project "${me.project}". Follow ${hub.HUB}/AGENT-PROTOCOL.md${me.role === 'lead' ? ` and ${hub.HUB}/LEAD-AGENT.md` : ''}. The CEO never reads this chat.`,
+      pr ? `Project phase: ${pr.phase}.${pr.phase === 'planning' && me.role === 'lead' ? ' You plan first: protocol section 0.' : ''}${pr.phase === 'planning' && me.role !== 'lead' ? ' Wait for the lead to finish the plan; check my-inbox and task list.' : ''}` : '',
+      `Commands: ${B}/post-item --type status|question|approval|delivery|idea|handover --title ".." --bullet ".." (max 5) [--rec ".." --reversible yes|no] ; ${B}/task list|start|review <id> ; ${B}/my-inbox ; ${B}/post-item --help for all options.`,
+      st.checkpoint ? `Last checkpoint: ${JSON.stringify(st.checkpoint)}` : '',
+      lines.length ? `New from the hub:\n${lines.join('\n')}` : '',
+    ].filter(Boolean).join('\n');
+    out({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: ctx } });
+  }
+
+  if (name === 'PostToolUse' || name === 'PostToolUseFailure') {
+    const patch = { ...base, state: 'working', last_activity_at: hub.nowIso(), last_tool: ev.tool_name,
+      tool_calls: (st.tool_calls || 0) + 1 };
+    if (name === 'PostToolUseFailure') patch.errors = (st.errors || 0) + 1;
+    const input = ev.tool_input || {};
+    if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(ev.tool_name || '')) {
+      patch.edits = (st.edits || 0) + 1;
+      const f = input.file_path || input.notebook_path;
+      if (f) patch.files_touched = [...new Set([...(st.files_touched || []), f])].slice(-200);
+    }
+    // Loop detection: identical tool call 5 times in a row.
+    const sig = crypto.createHash('sha1').update(`${ev.tool_name}:${JSON.stringify(input)}`).digest('hex').slice(0, 10);
+    const prev = st.loop || {};
+    patch.loop = prev.sig === sig ? { sig, count: prev.count + 1, tool: ev.tool_name } : { sig, count: 1, tool: ev.tool_name };
+    if (patch.loop.count === 5) hub.log('loop_detected', { agent: me.agent, project: me.project, tool: ev.tool_name });
+    hub.touchAgent(me.agent, patch);
+    const lines = hub.pendingFor(me.agent, true);
+    const notes = [];
+    if (lines.length) notes.push(`New from the hub (act on these now):\n${lines.join('\n')}`);
+    if (patch.loop.count >= 5) notes.push(`HUB WARNING: you ran the same ${ev.tool_name} call ${patch.loop.count} times in a row. Change approach or post a question.`);
+    if (notes.length) out({ hookSpecificOutput: { hookEventName: name, additionalContext: notes.join('\n') } });
+    process.exit(0);
+  }
+
+  if (name === 'Stop') {
+    const tokens = ev.transcript_path ? tokenTotals(ev.transcript_path) : null;
+    const patch = { ...base, state: 'stopped', last_activity_at: hub.nowIso(), last_stop_at: hub.nowIso() };
+    if (tokens && tokens.input + tokens.output > 0) {
+      const sessions = { ...(st.token_sessions || {}), [ev.session_id]: tokens };
+      const keys = Object.keys(sessions).slice(-20);
+      patch.token_sessions = Object.fromEntries(keys.map((k) => [k, sessions[k]]));
+      patch.tokens = Object.values(patch.token_sessions).reduce((a, t) => ({
+        input: a.input + t.input, output: a.output + t.output, cache_read: a.cache_read + t.cache_read, cache_write: a.cache_write + t.cache_write,
+      }), { input: 0, output: 0, cache_read: 0, cache_write: 0 });
+    }
+    const lines = hub.pendingFor(me.agent, true);
+    if (lines.length) {
+      hub.touchAgent(me.agent, { ...patch, state: 'working' });
+      blockStop(`New from the hub, act on it before stopping:\n${lines.join('\n')}`);
+    }
+    // Keep-alive: an agent that still owns in-progress work and is not waiting on the CEO keeps going.
+    const cfg = hub.findIdentity(ev.cwd || process.cwd());
+    if (cfg.keep_alive !== false && !ev.stop_hook_active && me.project) {
+      const mine = hub.listTasks(me.project).filter((t) => t.owner === me.agent && t.status === 'in-progress');
+      const waiting = hub.listJson(hub.DIRS.inbox).some((f) => {
+        const it = hub.readJson(`${hub.DIRS.inbox}/${f}`);
+        return it && it.agent === me.agent && it.needs_me;
+      });
+      if (mine.length && !waiting) {
+        hub.touchAgent(me.agent, { ...patch, state: 'working' });
+        blockStop(`You still own in-progress task ${mine.map((t) => t.id).join(', ')}. Keep working per the plan. If you are blocked on a human decision, post a question (post-item). If the task is finished: task review <id>, then post a delivery item.`);
+      }
+    }
+    hub.touchAgent(me.agent, patch);
+    process.exit(0);
+  }
+
+  if (name === 'PreCompact') {
+    // Checkpoint for handover / context loss: what the agent was doing, from hub state.
+    const checkpoint = { at: hub.nowIso(), current_task: st.current_task || null, last_status: st.last_status_title || null,
+      files_touched: (st.files_touched || []).slice(-15) };
+    hub.touchAgent(me.agent, { ...base, checkpoint });
+    hub.log('checkpoint', { agent: me.agent, project: me.project, ...checkpoint });
+    process.exit(0);
+  }
+
+  if (name === 'SessionEnd') {
+    hub.touchAgent(me.agent, { ...base, state: 'offline', last_activity_at: hub.nowIso(), session_ended_at: hub.nowIso() });
+    hub.log('session_end', { agent: me.agent, project: me.project, reason: ev.reason || '' });
+    process.exit(0);
+  }
+  process.exit(0);
+}

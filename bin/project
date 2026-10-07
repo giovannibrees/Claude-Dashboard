@@ -1,0 +1,135 @@
+#!/usr/bin/env node
+// Create and manage projects: frozen scope (the plan), never-list, phase, readiness gate.
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const hub = require('../lib/hub');
+
+const HELP = `project: manage a project's plan scope and phase
+
+  project new --name <p> --goal "one sentence" --plan /abs/path/PLAN.md
+              --scope "Epic 1: Auth" --scope "Epic 2: Billing" ...
+              [--never "No mobile app"] [--never ...] [--lead <agent>] [--repo /abs/path]
+  project show <p>
+  project list
+  project phase <p> <planning|building|review|complete>   (building requires the readiness gate to pass)
+  project ready <p>                                        (run the readiness gate only)
+  project plan <p> --goal "..." --plan /abs/PLAN.md --scope "Epic 1: ..." [--scope ...] [--never ...]
+                                                           (set or replace the plan while in planning)
+  project add-scope <p> "Epic 3: ..." --approved-item <item-id>   (scope change; needs an approved approval item)
+
+Scope is frozen once the project leaves planning. Anything not in scope is an idea (post-item --type idea).
+`;
+
+const args = hub.parseArgs(process.argv.slice(2), ['scope', 'never']);
+const [cmd, name, ...rest] = args._;
+if (!cmd || args.help) { process.stdout.write(HELP); process.exit(cmd ? 0 : 1); }
+hub.ensureDirs();
+
+function load(p) {
+  const pr = hub.readProject(p);
+  if (!pr) hub.die(`no project ${p} (project list)`);
+  return pr;
+}
+function save(pr) { hub.writeJson(path.join(hub.projectDir(pr.name), 'project.json'), { ...pr, updated_at: hub.nowIso() }); }
+
+// Readiness gate: every task traces to a scope entry and has acceptance criteria and an owner role.
+function readiness(pr) {
+  const tasks = hub.listTasks(pr.name);
+  const problems = [];
+  if (!pr.plan || !fs.existsSync(pr.plan)) problems.push(`plan file missing: ${pr.plan || '(none)'}`);
+  if (!pr.scope.length) problems.push('scope is empty');
+  if (!tasks.length) problems.push('no tasks yet (task add ...)');
+  for (const t of tasks) {
+    if (!pr.scope.includes(t.epic)) problems.push(`${t.id}: epic "${t.epic}" is not in scope`);
+    if (!t.acceptance || !t.acceptance.length) problems.push(`${t.id}: no acceptance criteria`);
+  }
+  const covered = new Set(tasks.map((t) => t.epic));
+  for (const s of pr.scope) if (!covered.has(s)) problems.push(`scope "${s}" has no tasks`);
+  return { verdict: problems.length ? 'FAIL' : 'PASS', problems };
+}
+
+switch (cmd) {
+  case 'new': {
+    const n = args.name || name;
+    if (!n || !args.goal || !args.scope) hub.die('need --name, --goal and at least one --scope');
+    if (hub.readProject(n)) hub.die(`project ${n} exists`);
+    const pr = {
+      name: n, goal: args.goal, plan: args.plan ? path.resolve(args.plan) : '',
+      repo: args.repo ? path.resolve(args.repo) : '',
+      scope: args.scope, never: args.never || [], lead: args.lead || '',
+      phase: 'planning', created_at: hub.nowIso(),
+    };
+    save(pr);
+    fs.mkdirSync(path.join(hub.projectDir(n), 'tasks'), { recursive: true });
+    hub.log('project_created', { project: n, scope: pr.scope });
+    process.stdout.write(`created project ${n} (phase planning)\n`);
+    break;
+  }
+  case 'plan': {
+    const pr = load(name);
+    if (pr.phase !== 'planning') hub.die('the plan is frozen once building starts; use add-scope with an approved change request');
+    const next = { ...pr };
+    if (args.goal) next.goal = args.goal;
+    if (args.plan) next.plan = path.resolve(args.plan);
+    if (args.scope) next.scope = args.scope;
+    if (args.never) next.never = args.never;
+    if (args.lead) next.lead = args.lead;
+    save(next);
+    hub.log('project_planned', { project: pr.name, scope: next.scope });
+    process.stdout.write(`plan saved for ${pr.name}: ${next.scope.length} scope entries, ${next.never.length} never\n`);
+    break;
+  }
+  case 'list':
+    for (const p of hub.listProjects()) {
+      const t = hub.listTasks(p.name);
+      process.stdout.write(`${p.name}  phase=${p.phase}  tasks ${t.filter((x) => x.status === 'done').length}/${t.length} done\n`);
+    }
+    break;
+  case 'show': {
+    const pr = load(name);
+    process.stdout.write(JSON.stringify({ ...pr, tasks: hub.listTasks(pr.name).map((t) => `${t.id} [${t.status}] ${t.title} (${t.owner || 'unassigned'})`) }, null, 2) + '\n');
+    break;
+  }
+  case 'ready': {
+    const r = readiness(load(name));
+    process.stdout.write(`${r.verdict}\n${r.problems.map((p) => `  - ${p}`).join('\n')}\n`);
+    process.exit(r.verdict === 'PASS' ? 0 : 1);
+    break;
+  }
+  case 'phase': {
+    const pr = load(name);
+    const phase = rest[0];
+    if (!hub.PHASES.includes(phase)) hub.die(`phase must be one of ${hub.PHASES.join(', ')}`);
+    if (phase === 'building') {
+      const r = readiness(pr);
+      if (r.verdict !== 'PASS') hub.die(`readiness gate FAIL:\n${r.problems.map((p) => `  - ${p}`).join('\n')}`);
+    }
+    if (phase === 'complete') {
+      const open = hub.listTasks(pr.name).filter((t) => t.status !== 'done');
+      if (open.length) hub.die(`${open.length} tasks not done: ${open.map((t) => t.id).join(', ')}`);
+    }
+    save({ ...pr, phase, [`${phase}_at`]: hub.nowIso() });
+    hub.log('project_phase', { project: pr.name, phase });
+    process.stdout.write(`${pr.name} -> ${phase}\n`);
+    break;
+  }
+  case 'add-scope': {
+    const pr = load(name);
+    const entry = rest[0];
+    if (!entry) hub.die('give the new scope entry text');
+    if (pr.phase !== 'planning') {
+      const ans = args.approved_item && hub.readJson(path.join(hub.DIRS.answers, `${args.approved_item}.json`));
+      const it = args.approved_item && hub.readItem(args.approved_item);
+      if (!ans || !it || it.type !== 'approval' || !it.change || !['approve', 'feedback'].includes(ans.decision)) {
+        hub.die('scope is frozen. Post an approval with --change minor|moderate|major, get it approved, then pass --approved-item <id>');
+      }
+    }
+    save({ ...pr, scope: [...pr.scope, entry] });
+    hub.log('scope_changed', { project: pr.name, added: entry, approved_item: args.approved_item || null });
+    process.stdout.write(`added scope "${entry}"\n`);
+    break;
+  }
+  default: hub.die(`unknown command ${cmd}\n${HELP}`);
+}

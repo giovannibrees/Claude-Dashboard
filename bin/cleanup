@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+// Delete archived items and answers older than N days (default 30) and logs older than 90 days.
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const hub = require('../lib/hub');
+
+const args = hub.parseArgs(process.argv.slice(2));
+if (args.help) { process.stdout.write('cleanup [--days 30] [--log-days 90] [--dry-run]\n'); process.exit(0); }
+const days = Number(args.days || 30);
+const logDays = Number(args.log_days || 90);
+let removed = 0;
+function sweep(dir, maxDays, test = () => true) {
+  for (const f of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
+    const p = path.join(dir, f);
+    if (f.startsWith('.') || !test(f)) continue;
+    const ageDays = (Date.now() - fs.statSync(p).mtimeMs) / 864e5;
+    if (ageDays > maxDays) { removed++; if (!args.dry_run) fs.unlinkSync(p); else process.stdout.write(`would delete ${p}\n`); }
+  }
+}
+// Answers are kept as long as their archived item: only delete answers whose item is gone or old.
+sweep(hub.DIRS.archive, days, (f) => f.endsWith('.json'));
+sweep(hub.DIRS.answers, days, (f) => f.endsWith('.json') && !fs.existsSync(path.join(hub.DIRS.inbox, f)));
+sweep(hub.DIRS.log, logDays, (f) => f.endsWith('.jsonl'));
+for (const d of fs.existsSync(hub.DIRS.directives) ? fs.readdirSync(hub.DIRS.directives) : []) sweep(path.join(hub.DIRS.directives, d), days);
+if (!args.dry_run) hub.log('cleanup', { removed, days });
+process.stdout.write(`${args.dry_run ? 'would remove' : 'removed'} ${removed} files\n`);

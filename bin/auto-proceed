@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+// Resolve an unanswered, reversible question/approval with the agent's own recommendation
+// once it has waited 4 hours, and post a status item saying so. Refuses anything irreversible.
+'use strict';
+
+const path = require('path');
+const { execFileSync } = require('child_process');
+const hub = require('../lib/hub');
+
+const args = hub.parseArgs(process.argv.slice(2));
+const id = args._[0];
+if (!id || args.help) { process.stdout.write('auto-proceed <item-id>: proceed with your recommendation after 4h without an answer (reversible items only)\n'); process.exit(id ? 0 : 1); }
+const item = hub.readItem(id);
+if (!item) hub.die(`no item ${id}`);
+if (!hub.NEEDS_ME_TYPES.includes(item.type)) hub.die('only question and approval items can auto-proceed');
+if (item.status !== 'open') hub.die(`item is already ${item.status}; read the answer with: wait-answer ${id}`);
+if (item.reversible !== true) hub.die('NOT reversible: wait for the CEO. No exceptions (deletions, payments, public-facing, production data).');
+if (item.change) hub.die('scope change requests always wait for the CEO.');
+const waitedH = (Date.now() - Date.parse(item.timestamp)) / 3600e3;
+if (waitedH < hub.AUTO_PROCEED_HOURS) hub.die(`only ${waitedH.toFixed(1)}h waited; auto-proceed is allowed after ${hub.AUTO_PROCEED_HOURS}h`);
+
+hub.writeAnswer(item, 'auto', `Proceeded with recommendation: ${item.recommendation}`, item.agent);
+const st = hub.readJson(hub.agentFile(item.agent), {});
+hub.touchAgent(item.agent, { seen_answers: [...new Set([...(st.seen_answers || []), id])].slice(-500) });
+hub.log('auto_proceeded', { item_id: id, agent: item.agent, project: item.project });
+const statusId = execFileSync(process.execPath, [path.join(__dirname, 'post-item'),
+  '--type', 'status', '--agent', item.agent, '--project', item.project,
+  '--title', `Proceeded without answer: ${item.title}`.slice(0, 100),
+  '--bullet', `No answer after ${waitedH.toFixed(1)}h on a reversible decision`,
+  '--bullet', `Went with: ${item.recommendation}`.slice(0, 220),
+  '--bullet', `Original item: ${id}`], { encoding: 'utf8' }).trim();
+process.stdout.write(`auto-proceeded ${id}; posted status ${statusId}\n`);
