@@ -1,0 +1,131 @@
+#!/usr/bin/env node
+// Post one item to the hub inbox. Prints the new item id on stdout.
+// Run with --help for usage.
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const hub = require('../lib/hub');
+
+const HELP = `post-item: write one protocol item to the hub inbox
+
+Usage:
+  post-item --type <status|question|approval|delivery|idea|handover|audit>
+            --title "Short title"
+            --bullet "point" [--bullet "point" ...]        (max 5)
+            [--rec "recommendation"] [--rec ...]             (one per numbered question)
+            [--reversible yes|no]                            (required for question/approval)
+            [--attach /abs/path.png] [--attach /abs/colors.csv]
+            [--link /abs/path/or/url] [--verify "npm test: 48 passed"]   (delivery)
+            [--to <agent>]                                   (handover)
+            [--task <task-id>] [--reply-to <item-id>] [--priority high]
+            [--change minor|moderate|major]                  (approval that changes scope)
+            [--no-visual]                                    (skip screenshot/color check)
+            [--agent <name> --project <name>]                (default: .hub.json or HUB_AGENT/HUB_PROJECT)
+
+Prints the item id. Exit code 1 with a list of problems if the item breaks the protocol.
+Example:
+  ID=$(post-item --type question --title "Pick auth provider" \\
+       --bullet "1. Clerk or Supabase auth?" --bullet "2. Allow Google login?" \\
+       --rec "Supabase auth" --rec "Yes, Google only" --reversible yes)
+`;
+
+const SECRET_PATTERNS = [
+  /\b(sk|pk|rk)[-_](live|test|ant|proj)?[-_]?[A-Za-z0-9_-]{16,}\b/g,
+  /\bAKIA[0-9A-Z]{16}\b/g,
+  /\bgh[pousr]_[A-Za-z0-9]{30,}\b/g,
+  /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,
+  /\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+/gi,
+];
+function redact(s) {
+  let out = String(s);
+  for (const re of SECRET_PATTERNS) out = out.replace(re, '[redacted]');
+  return out;
+}
+
+const args = hub.parseArgs(process.argv.slice(2), ['bullet', 'rec', 'attach', 'link', 'verify']);
+if (args.help || args.h) { process.stdout.write(HELP); process.exit(0); }
+
+const id0 = hub.identity({ agent: args.agent, project: args.project });
+if (!id0.agent || !id0.project) hub.die('no agent/project: add .hub.json to your repo (see README) or pass --agent and --project');
+
+const type = String(args.type || '').toLowerCase();
+const bullets = (args.bullet || []).map((b) => redact(String(b).trim())).filter(Boolean);
+const recs = (args.rec || []).map((r) => redact(String(r).trim())).filter(Boolean);
+const reversible = args.reversible === undefined ? undefined
+  : ['yes', 'true', 'y', '1'].includes(String(args.reversible).toLowerCase());
+
+const item = {
+  id: hub.newId('itm'),
+  timestamp: hub.nowIso(),
+  agent: id0.agent,
+  project: id0.project,
+  role: id0.role || undefined,
+  type,
+  title: redact(String(args.title || '').trim()),
+  bullets,
+  needs_me: hub.NEEDS_ME_TYPES.includes(type),
+  priority: args.priority === 'high' ? 'high' : 'normal',
+  attachments: (args.attach || []).map((a) => (/^https?:/.test(a) ? a : path.resolve(a))),
+  recommendation: recs.length > 1 ? recs.map((r, i) => `${i + 1}: ${r}`).join('; ') : (recs[0] || undefined),
+  recommendations: recs.length > 1 ? recs : undefined,
+  reversible,
+  links: args.link ? args.link.map((l) => (/^https?:/.test(l) ? l : path.resolve(l))) : undefined,
+  verification: args.verify ? args.verify.map(redact) : undefined,
+  to_agent: args.to || undefined,
+  task: args.task || undefined,
+  reply_to: args.reply_to || undefined,
+  change: args.change || undefined,
+  no_visual: args.no_visual ? true : undefined,
+  status: hub.initialStatus(type),
+};
+if (type === 'question' || type === 'approval') {
+  // Hash of what the CEO is approving. If the agent re-files different text, old answers do not apply.
+  item.content_hash = crypto.createHash('sha256')
+    .update(JSON.stringify([item.title, item.bullets, item.recommendation])).digest('hex').slice(0, 12);
+  item.auto_proceed_at = item.reversible
+    ? new Date(Date.now() + hub.AUTO_PROCEED_HOURS * 3600e3).toISOString() : undefined;
+}
+if (item.change && !['minor', 'moderate', 'major'].includes(item.change)) hub.die('--change must be minor, moderate or major');
+if (item.change && type !== 'approval') hub.die('--change is only for approval items (scope change requests)');
+if (recs.length > 1 && recs.length !== bullets.length) {
+  hub.die(`batched question: give one --rec per numbered --bullet (${bullets.length} bullets, ${recs.length} recs)`);
+}
+if (item.task) {
+  const tp = hub.taskPath(item.project, item.task);
+  if (!fs.existsSync(tp)) hub.die(`task ${item.task} not found in project ${item.project} (see: task list)`);
+}
+for (const k of Object.keys(item)) if (item[k] === undefined) delete item[k];
+
+const problems = hub.validateItem(item);
+if (type === 'question' || type === 'approval') {
+  // Anti-spam: max 3 open questions/approvals per agent. Batch instead.
+  const open = hub.listJson(hub.DIRS.inbox).map((f) => hub.readJson(path.join(hub.DIRS.inbox, f)))
+    .filter((x) => x && x.agent === item.agent && x.needs_me);
+  if (open.length >= 3) problems.push(`you already have ${open.length} open questions/approvals; batch into one of them or wait for answers`);
+}
+if (problems.length) {
+  process.stderr.write(`hub: item rejected, fix and retry:\n${problems.map((p) => `  - ${p}`).join('\n')}\n`);
+  process.exit(1);
+}
+
+hub.ensureDirs();
+hub.writeJson(path.join(hub.DIRS.inbox, `${item.id}.json`), item);
+hub.log('item_posted', { item_id: item.id, agent: item.agent, project: item.project, type, title: item.title, needs_me: item.needs_me });
+
+const agentPatch = { project: item.project, role: id0.role || undefined, repo: id0.repo || undefined, last_item_at: item.timestamp, last_item_type: type };
+if (type === 'status') { agentPatch.last_status_at = item.timestamp; agentPatch.last_status_title = item.title; }
+if (type === 'delivery') agentPatch.delivered_at = item.timestamp;
+if (item.task && ['status', 'question', 'approval'].includes(type)) agentPatch.current_task = item.task;
+for (const k of Object.keys(agentPatch)) if (agentPatch[k] === undefined) delete agentPatch[k];
+hub.touchAgent(item.agent, agentPatch);
+
+// A handover tied to a task marks the task as waiting for the receiving agent to accept it.
+if (type === 'handover' && item.task) {
+  const tp = hub.taskPath(item.project, item.task);
+  const t = hub.readJson(tp);
+  hub.writeJson(tp, { ...t, pending_owner: item.to_agent, handover_item: item.id, updated_at: hub.nowIso() });
+}
+
+process.stdout.write(item.id + '\n');

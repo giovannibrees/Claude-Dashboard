@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+// One entry point for the hub.
+//   hub start                      start the dashboard and open it in the browser
+//   hub connect                    connect the current folder (asks nothing, uses sensible defaults)
+//   hub status                     projects and agents at a glance
+//   hub <script> ...               run any script in bin/ (post-item, task, audit, ...)
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const hub = require('../lib/hub');
+
+const HELP = `hub: agent dashboard
+
+  hub start [--no-open]                 start the dashboard at http://localhost:4747
+  hub connect [folder] [--project name] [--agents lead,builder] [--brief BRIEF.md]
+                                        connect a project folder (default: current folder,
+                                        project = folder name, agents = lead,builder)
+  hub status                            projects and agents at a glance
+  hub <command> ...                     post-item, wait-answer, my-inbox, task, project,
+                                        tell, audit, auto-proceed, cleanup
+`;
+
+const [cmd, ...rest] = process.argv.slice(2);
+if (!cmd || cmd === 'help' || cmd === '--help') { process.stdout.write(HELP); process.exit(0); }
+
+if (cmd === 'start') {
+  const args = rest.includes('--no-open') ? [] : ['--open'];
+  require('child_process').spawn(process.execPath, [path.join(hub.HUB, 'server.js'), ...args], { stdio: 'inherit' });
+} else if (cmd === 'connect') {
+  const a = hub.parseArgs(rest);
+  const folder = path.resolve(a._[0] || process.cwd());
+  const project = a.project || path.basename(folder).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
+  const agents = String(a.agents || 'lead,builder').split(',').map((s) => s.trim()).filter(Boolean)
+    .map((name) => ({ name, role: name.startsWith('lead') ? 'lead' : (name.startsWith('design') ? 'designer' : 'dev') }));
+  let brief = '';
+  if (a.brief) brief = fs.readFileSync(path.resolve(a.brief), 'utf8');
+  try {
+    const r = require('../lib/connect').connect({ folder, project, agents, brief, keepAlive: !a.no_keep_alive, createFolder: true });
+    process.stdout.write(`Connected ${project}:\n${r.done.map((d) => `  - ${d}`).join('\n')}\n\nStart each agent in its own terminal window:\n`);
+    for (const s of r.startCommands) process.stdout.write(`  ${s.agent} (${s.role}):  ${s.terminal}\n`);
+    process.stdout.write(`\nThen type this in each Claude session:\n  ${r.firstPrompt}\n`);
+    if (!brief && !fs.existsSync(path.join(folder, 'BRIEF.md'))) process.stdout.write(`\nPut your app brief in ${path.join(folder, 'BRIEF.md')} first; the lead plans from it.\n`);
+  } catch (e) { hub.die(e.message); }
+} else if (cmd === 'status') {
+  for (const p of hub.listProjects()) {
+    const t = hub.listTasks(p.name);
+    process.stdout.write(`${p.name}: ${p.phase}, ${t.filter((x) => x.status === 'done').length}/${t.length} tasks done\n`);
+  }
+  for (const f of hub.listJson(hub.DIRS.agents)) {
+    const ag = hub.readJson(path.join(hub.DIRS.agents, f));
+    if (ag) process.stdout.write(`  ${ag.agent} [${ag.project}] ${ag.state || '?'}, active ${Math.round(hub.ageMinutes(ag.last_activity_at || ag.last_seen))} min ago\n`);
+  }
+} else {
+  const script = path.join(__dirname, path.basename(cmd));
+  if (!fs.existsSync(script) || cmd === 'hub' || cmd === 'hook') hub.die(`unknown command ${cmd}\n${HELP}`);
+  const r = spawnSync(process.execPath, [script, ...rest], { stdio: 'inherit' });
+  process.exit(r.status == null ? 1 : r.status);
+}

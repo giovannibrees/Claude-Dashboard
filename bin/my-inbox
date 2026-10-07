@@ -1,0 +1,16 @@
+#!/usr/bin/env node
+// Show this agent's new answers and directives (from the CEO or lead agent), then mark them read.
+'use strict';
+
+const path = require('path');
+const hub = require('../lib/hub');
+
+const args = hub.parseArgs(process.argv.slice(2));
+if (args.help) {
+  process.stdout.write('my-inbox [--peek] [--agent name]: print new answers and directives for this agent, mark them read (unless --peek)\n');
+  process.exit(0);
+}
+const me = hub.identity({ agent: args.agent, project: args.project });
+if (!me.agent) hub.die('no agent identity: add .hub.json or pass --agent');
+const lines = hub.pendingFor(me.agent, !args.peek);
+process.stdout.write(lines.length ? lines.join('\n') + '\n' : 'Nothing new from the hub.\n');

@@ -1,0 +1,118 @@
+#!/usr/bin/env node
+// Tasks per project: backlog, ready-for-dev, in-progress, review, done. Tasks must trace to the project's scope.
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const hub = require('../lib/hub');
+
+const HELP = `task: plan and track tasks (statuses: ${hub.TASK_STATUSES.join(' -> ')})
+
+  task list [--project p] [--mine]
+  task add <id> --title "..." --epic "<exact scope entry>" --ac "acceptance criterion" [--ac ...] [--owner agent] [--role dev]
+  task start <id>          (sets owner to you, status in-progress)
+  task review <id>         (in-progress -> review)
+  task done <id> --evidence "npm test: 48 passed"     (review -> done; lead agent or reviewer)
+  task back <id> --reason "..."                        (review -> in-progress, with reason)
+  task accept <id>         (accept a handover addressed to you)
+  task show <id>
+
+Statuses only move forward one step, except "back". Work that fits no scope entry is an idea:
+  post-item --type idea --title "..." --bullet "..."
+`;
+
+const args = hub.parseArgs(process.argv.slice(2), ['ac', 'evidence']);
+const [cmd, tid] = args._;
+if (!cmd || args.help) { process.stdout.write(HELP); process.exit(cmd ? 0 : 1); }
+const me = hub.identity({ agent: args.agent, project: args.project });
+const project = me.project;
+if (!project) hub.die('no project: add .hub.json or pass --project');
+const pr = hub.readProject(project);
+if (!pr) hub.die(`project ${project} is not registered (project new ...)`);
+
+function load(id) {
+  const t = hub.readJson(hub.taskPath(project, id));
+  if (!t) hub.die(`no task ${id} in ${project}`);
+  return t;
+}
+function save(t, event, extra = {}) {
+  t.updated_at = hub.nowIso();
+  t.history = [...(t.history || []), { at: t.updated_at, by: me.agent || 'ceo', event, ...extra }].slice(-30);
+  hub.writeJson(hub.taskPath(project, t.id), t);
+  hub.log('task_changed', { project, task: t.id, status: t.status, owner: t.owner || null, by: me.agent || 'ceo', change: event });
+  if (me.agent && t.owner === me.agent) hub.touchAgent(me.agent, { current_task: t.status === 'done' ? null : t.id });
+}
+function step(t, from, to) {
+  if (t.status !== from) hub.die(`${t.id} is ${t.status}; expected ${from}`);
+  t.status = to;
+}
+
+switch (cmd) {
+  case 'list': {
+    let ts = hub.listTasks(project);
+    if (args.mine) ts = ts.filter((t) => t.owner === me.agent || t.pending_owner === me.agent);
+    for (const t of ts) process.stdout.write(`${t.id}  [${t.status}]  ${t.title}  owner=${t.owner || '-'}${t.pending_owner ? ` handover->${t.pending_owner}` : ''}  epic=${t.epic}\n`);
+    if (!ts.length) process.stdout.write('no tasks\n');
+    break;
+  }
+  case 'show': process.stdout.write(JSON.stringify(load(tid), null, 2) + '\n'); break;
+  case 'add': {
+    if (!tid || !args.title || !args.epic) hub.die('need <id> --title --epic');
+    if (!pr.scope.includes(args.epic)) {
+      hub.die(`"${args.epic}" is not in the plan scope:\n${pr.scope.map((s) => `  - ${s}`).join('\n')}\nIf this is new work, post it as an idea: post-item --type idea --title "..."`);
+    }
+    if (pr.phase !== 'planning' && !args.ac) hub.die('tasks added during build need --ac acceptance criteria');
+    if (fs.existsSync(hub.taskPath(project, tid))) hub.die(`task ${tid} exists`);
+    const t = { id: tid, project, title: args.title, epic: args.epic, acceptance: args.ac || [], role: args.role || '',
+      owner: args.owner || '', status: 'backlog', created_at: hub.nowIso(), created_by: me.agent || 'ceo' };
+    if (t.acceptance.length) t.status = 'ready-for-dev';
+    save(t, 'added');
+    process.stdout.write(`added ${tid} [${t.status}]\n`);
+    break;
+  }
+  case 'start': {
+    const t = load(tid);
+    if (pr.phase === 'planning') hub.die('project is still in planning; the readiness gate must pass first (project phase <p> building)');
+    if (t.owner && t.owner !== me.agent) hub.die(`${tid} is owned by ${t.owner}; ask for a handover`);
+    step(t, 'ready-for-dev', 'in-progress');
+    t.owner = me.agent; t.started_at = hub.nowIso();
+    save(t, 'started');
+    process.stdout.write(`${tid} in-progress (owner ${me.agent})\n`);
+    break;
+  }
+  case 'review': { const t = load(tid); step(t, 'in-progress', 'review'); save(t, 'to review'); process.stdout.write(`${tid} review\n`); break; }
+  case 'done': {
+    const t = load(tid);
+    if (!args.evidence) hub.die('done needs --evidence (what was verified, e.g. "npm test: 48 passed")');
+    step(t, 'review', 'done');
+    t.evidence = args.evidence; t.done_at = hub.nowIso();
+    save(t, 'done');
+    process.stdout.write(`${tid} done\n`);
+    break;
+  }
+  case 'back': {
+    const t = load(tid);
+    if (!args.reason) hub.die('back needs --reason');
+    step(t, 'review', 'in-progress');
+    t.review_loops = (t.review_loops || 0) + 1;
+    save(t, 'sent back', { reason: args.reason });
+    process.stdout.write(`${tid} back to in-progress (review loop ${t.review_loops})\n`);
+    if (t.review_loops > 5) process.stdout.write('WARNING: more than 5 review loops. Escalate to the CEO with a question.\n');
+    break;
+  }
+  case 'accept': {
+    const t = load(tid);
+    if (t.pending_owner !== me.agent) hub.die(`${tid} has no handover addressed to ${me.agent}`);
+    const prev = t.owner;
+    t.owner = me.agent; delete t.pending_owner;
+    if (t.handover_item) {
+      hub.updateItem(t.handover_item, { status: 'accepted', accepted_at: hub.nowIso() });
+      hub.moveToArchive(t.handover_item);
+      delete t.handover_item;
+    }
+    save(t, 'handover accepted', { from: prev });
+    process.stdout.write(`${tid} now owned by ${me.agent}\n`);
+    break;
+  }
+  default: hub.die(`unknown command ${cmd}\n${HELP}`);
+}

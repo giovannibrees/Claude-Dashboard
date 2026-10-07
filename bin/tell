@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+// Send a directive to an agent (used by the lead agent; the CEO uses the dashboard).
+// The agent sees it through its hooks on the next tool call, or via my-inbox.
+'use strict';
+
+const path = require('path');
+const hub = require('../lib/hub');
+
+const args = hub.parseArgs(process.argv.slice(2));
+const [to, ...words] = args._;
+const text = words.join(' ').trim();
+if (!to || !text || args.help) { process.stdout.write('tell <agent> "directive text" [--from name]\n'); process.exit(to ? 0 : 1); }
+const from = args.from || hub.identity({}).agent || 'ceo';
+const d = { id: hub.newId('dir'), timestamp: hub.nowIso(), from, to, text: text.slice(0, 500) };
+hub.writeJson(path.join(hub.DIRS.directives, hub.slug(to), `${d.id}.json`), d);
+hub.log('directive', { from, to, text: d.text, id: d.id });
+process.stdout.write(d.id + '\n');

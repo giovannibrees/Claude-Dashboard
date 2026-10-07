@@ -1,0 +1,114 @@
+#!/usr/bin/env node
+// Facts for the lead agent: who is stalled, off-plan, looping, overdue, or breaking the protocol.
+// The lead agent runs this every 30 minutes, investigates, then acts (tell / task back / post-item).
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { spawnSync } = require('child_process');
+const hub = require('../lib/hub');
+
+const args = hub.parseArgs(process.argv.slice(2));
+if (args.help) {
+  process.stdout.write('audit [--project p] [--json] [--post]: list problems across agents, tasks, items and handovers.\n  --post writes the top findings as one audit item to the dashboard.\n');
+  process.exit(0);
+}
+const stateFile = path.join(hub.DIRS.projects, '.last-audit.json');
+const last = hub.readJson(stateFile, {}).at || new Date(Date.now() - 24 * 3600e3).toISOString();
+const findings = []; // {severity: high|normal, agent, project, text}
+const add = (severity, project, agent, text) => findings.push({ severity, project, agent: agent || '', text });
+
+const projects = hub.listProjects().filter((p) => !args.project || p.name === args.project);
+const projNames = new Set(projects.map((p) => p.name));
+const agents = hub.listJson(hub.DIRS.agents).map((f) => hub.readJson(path.join(hub.DIRS.agents, f))).filter(Boolean)
+  .filter((a) => !args.project || a.project === args.project);
+const inbox = hub.listJson(hub.DIRS.inbox).map((f) => hub.readJson(path.join(hub.DIRS.inbox, f))).filter(Boolean);
+const allTasks = projects.flatMap((p) => hub.listTasks(p.name));
+
+// Agents
+for (const a of agents) {
+  if (a.role === 'lead') continue;
+  const idleMin = hub.ageMinutes(a.last_activity_at || a.last_seen);
+  const owns = allTasks.filter((t) => t.owner === a.agent && t.status === 'in-progress');
+  const waiting = inbox.some((i) => i.agent === a.agent && i.needs_me);
+  if (owns.length && idleMin > hub.STALE_MINUTES && !waiting) add('high', a.project, a.agent, `stalled: owns ${owns.map((t) => t.id).join(', ')} but no activity for ${Math.round(idleMin)} min`);
+  if (a.state === 'working' && hub.ageMinutes(a.last_status_at) > hub.STATUS_EVERY_HOURS * 60 && idleMin < hub.STALE_MINUTES) add('normal', a.project, a.agent, `status overdue: last status ${a.last_status_at ? Math.round(hub.ageMinutes(a.last_status_at) / 60) + 'h ago' : 'never'}`);
+  if (!owns.length && (a.edits || 0) > 0 && idleMin < hub.STALE_MINUTES && !a.delivered_at) add('high', a.project, a.agent, `working without an in-progress task (${a.edits} edits this session): possible off-plan work`);
+  if (a.loop && a.loop.count >= 5) add('high', a.project, a.agent, `looping: same ${a.loop.tool} call ${a.loop.count}x in a row`);
+  if ((a.errors || 0) >= 10) add('normal', a.project, a.agent, `${a.errors} tool errors this session`);
+  const pr = projects.find((p) => p.name === a.project);
+  const roots = [pr && pr.repo, a.repo].filter(Boolean).map((r) => r.replace(/\/?$/, '/'));
+  if (roots.length && a.files_touched) {
+    const outside = a.files_touched.filter((f) => !roots.some((r) => f.startsWith(r)));
+    if (outside.length) add('high', a.project, a.agent, `edited files outside the project repo: ${outside.slice(0, 3).join(', ')}`);
+  }
+  if (a.delivered_at && hub.ageMinutes(a.delivered_at) > 30 && idleMin < 10 && (a.edits || 0) > 0 && hub.ageMinutes(a.last_activity_at) < hub.ageMinutes(a.delivered_at)) {
+    add('normal', a.project, a.agent, 'still active after its delivery: check it is not inventing new work');
+  }
+}
+
+// Open items
+for (const it of inbox) {
+  if (args.project && it.project !== args.project) continue;
+  const errs = hub.validateItem(it).filter((e) => !e.startsWith('attachment not found'));
+  if (errs.length) add('normal', it.project, it.agent, `protocol violation on "${it.title}": ${errs[0]}`);
+  if (it.needs_me && it.status === 'open') {
+    const h = hub.ageMinutes(it.timestamp) / 60;
+    if (h > hub.AUTO_PROCEED_HOURS && it.reversible && !it.change) add('normal', it.project, it.agent, `"${it.title}" unanswered ${h.toFixed(1)}h and reversible: agent should run auto-proceed`);
+    if (h > hub.AUTO_PROCEED_HOURS && (!it.reversible || it.change)) add('normal', it.project, it.agent, `"${it.title}" waiting on CEO ${h.toFixed(1)}h (not reversible)`);
+  }
+  if (it.type === 'handover' && it.status === 'open' && hub.ageMinutes(it.timestamp) > 60) add('high', it.project, it.to_agent, `handover from ${it.agent} not accepted after ${Math.round(hub.ageMinutes(it.timestamp))} min`);
+}
+const perAgentOpen = {};
+for (const it of inbox) if (it.needs_me) perAgentOpen[it.agent] = (perAgentOpen[it.agent] || 0) + 1;
+
+// Tasks and projects
+for (const p of projects) {
+  const ts = hub.listTasks(p.name);
+  for (const t of ts) {
+    if (!p.scope.includes(t.epic)) add('high', p.name, t.owner, `${t.id} epic "${t.epic}" is not in the frozen scope`);
+    if (t.status === 'review' && hub.ageMinutes(t.updated_at) > 120) add('normal', p.name, t.owner, `${t.id} waiting in review for ${Math.round(hub.ageMinutes(t.updated_at) / 60)}h`);
+    if ((t.review_loops || 0) > 5) add('high', p.name, t.owner, `${t.id} sent back ${t.review_loops} times: escalate to the CEO`);
+    if (t.status === 'in-progress' && !t.owner) add('normal', p.name, '', `${t.id} in-progress without owner`);
+  }
+  if (p.phase === 'building' && ts.length && ts.every((t) => t.status === 'done')) add('normal', p.name, p.lead, 'all tasks done: run final review, then project phase complete');
+}
+
+// Git activity since the last audit, for the lead agent to compare against tasks.
+const git = {};
+for (const p of projects) {
+  if (!p.repo || !fs.existsSync(path.join(p.repo, '.git'))) continue;
+  const r = spawnSync('git', ['-C', p.repo, 'log', `--since=${last}`, '--pretty=format:%h %an %s', '-n', '15'], { encoding: 'utf8' });
+  git[p.name] = (r.stdout || '').split('\n').filter(Boolean);
+}
+
+const report = {
+  at: hub.nowIso(), since: last,
+  agents: agents.map((a) => ({ agent: a.agent, project: a.project, role: a.role || '', state: a.state || '', idle_min: Math.round(hub.ageMinutes(a.last_activity_at || a.last_seen)), current_task: a.current_task || null, open_questions: perAgentOpen[a.agent] || 0, edits: a.edits || 0 })),
+  findings: findings.sort((x, y) => (x.severity === y.severity ? 0 : x.severity === 'high' ? -1 : 1)),
+  git_since_last_audit: git,
+};
+hub.writeJson(stateFile, { at: report.at });
+hub.log('audit_run', { findings: findings.length, high: findings.filter((f) => f.severity === 'high').length });
+
+if (args.json) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+else {
+  const L = [`AUDIT ${report.at} (since ${last})`, '', 'Agents:'];
+  for (const a of report.agents) L.push(`  ${a.agent} [${a.project}] ${a.state || '?'} idle=${a.idle_min}m task=${a.current_task || '-'} open_q=${a.open_questions} edits=${a.edits}`);
+  L.push('', `Findings (${findings.length}):`);
+  for (const f of report.findings) L.push(`  [${f.severity}] ${f.project}${f.agent ? '/' + f.agent : ''}: ${f.text}`);
+  if (!findings.length) L.push('  none');
+  for (const [p, lines] of Object.entries(git)) { L.push('', `Commits in ${p}:`); for (const l of lines) L.push('  ' + l); }
+  process.stdout.write(L.join('\n') + '\n');
+}
+
+if (args.post && findings.length) {
+  const me = hub.identity({});
+  const proj = args.project || [...projNames][0] || me.project || 'all';
+  const top = report.findings.slice(0, 5).map((f) => `${f.agent ? f.agent + ': ' : ''}${f.text}`.slice(0, 220));
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'post-item'), '--type', 'audit', '--agent', me.agent || 'lead', '--project', proj,
+    '--title', `Audit: ${findings.length} finding${findings.length === 1 ? '' : 's'} (${findings.filter((f) => f.severity === 'high').length} high)`,
+    ...(findings.some((f) => f.severity === 'high') ? ['--priority', 'high'] : []),
+    ...top.flatMap((b) => ['--bullet', b])], { encoding: 'utf8' });
+  process.stdout.write(r.status === 0 ? `posted ${r.stdout}` : r.stderr);
+}
