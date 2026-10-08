@@ -9,10 +9,13 @@ const hub = require('../lib/hub');
 const HELP = `task: plan and track tasks (statuses: ${hub.TASK_STATUSES.join(' -> ')})
 
   task list [--project p] [--mine]
-  task add <id> --title "..." --epic "<exact scope entry>" --ac "acceptance criterion" [--ac ...] [--owner agent] [--role dev]
-  task start <id>          (sets owner to you, status in-progress)
-  task review <id>         (in-progress -> review)
-  task done <id> --evidence "npm test: 48 passed"     (review -> done; lead agent or reviewer)
+  task add <id> --title "..." --epic "<exact scope entry>" --ac "acceptance criterion" [--ac ...]
+           [--owner agent] [--files "src/auth/"] [--files ...] [--depends T-1] [--checks code,security,qa]
+  task start <id>          (sets owner to you, status in-progress; waits for depends_on)
+  task review <id> --evidence "npm test: 48 passed"   (in-progress -> review; checks start fresh)
+  task check <id> <code|security|qa> <pass|fail> --note "one line"   (reviewer, security, qa)
+                           (fail sends the task back to its owner with the note)
+  task done <id> --evidence "..."                     (review -> done; lead only, all checks passed)
   task back <id> --reason "..."                        (review -> in-progress, with reason)
   task accept <id>         (accept a handover addressed to you)
   task show <id>
@@ -21,7 +24,7 @@ Statuses only move forward one step, except "back". Work that fits no scope entr
   post-item --type idea --title "..." --bullet "..."
 `;
 
-const args = hub.parseArgs(process.argv.slice(2), ['ac', 'evidence']);
+const args = hub.parseArgs(process.argv.slice(2), ['ac', 'evidence', 'files', 'depends']);
 const [cmd, tid] = args._;
 if (!cmd || args.help) { process.stdout.write(HELP); process.exit(cmd ? 0 : 1); }
 const me = hub.identity({ agent: args.agent, project: args.project });
@@ -63,7 +66,11 @@ switch (cmd) {
     }
     if (pr.phase !== 'planning' && !args.ac) hub.die('tasks added during build need --ac acceptance criteria');
     if (fs.existsSync(hub.taskPath(project, tid))) hub.die(`task ${tid} exists`);
+    const checks = String(args.checks || 'code').split(',').map((c) => c.trim()).filter(Boolean);
+    if (checks.some((c) => !['code', 'security', 'qa'].includes(c))) hub.die('--checks takes code, security and/or qa');
+    if (!checks.includes('code')) checks.unshift('code');
     const t = { id: tid, project, title: args.title, epic: args.epic, acceptance: args.ac || [], role: args.role || '',
+      files: args.files || [], depends_on: args.depends || [], checks_required: checks, checks: {},
       owner: args.owner || '', status: 'backlog', created_at: hub.nowIso(), created_by: me.agent || 'ceo' };
     if (t.acceptance.length) t.status = 'ready-for-dev';
     save(t, 'added');
@@ -74,16 +81,55 @@ switch (cmd) {
     const t = load(tid);
     if (pr.phase === 'planning') hub.die('project is still in planning; the readiness gate must pass first (project phase <p> building)');
     if (t.owner && t.owner !== me.agent) hub.die(`${tid} is owned by ${t.owner}; ask for a handover`);
+    const blockedBy = (t.depends_on || []).filter((d) => (hub.readJson(hub.taskPath(project, d)) || {}).status !== 'done');
+    if (blockedBy.length) hub.die(`${tid} depends on ${blockedBy.join(', ')}, which ${blockedBy.length === 1 ? 'is' : 'are'} not done yet`);
+    const clash = hub.listTasks(project).filter((o) => o.id !== t.id && o.status === 'in-progress'
+      && (o.files || []).some((f) => (t.files || []).some((g) => f.startsWith(g) || g.startsWith(f))));
+    if (clash.length) hub.die(`${tid} touches the same files as ${clash.map((o) => `${o.id} (${o.owner})`).join(', ')}, which is in progress. Wait or ask the lead.`);
     step(t, 'ready-for-dev', 'in-progress');
     t.owner = me.agent; t.started_at = hub.nowIso();
     save(t, 'started');
     process.stdout.write(`${tid} in-progress (owner ${me.agent})\n`);
     break;
   }
-  case 'review': { const t = load(tid); step(t, 'in-progress', 'review'); save(t, 'to review'); process.stdout.write(`${tid} review\n`); break; }
+  case 'review': {
+    const t = load(tid);
+    if (!args.evidence) hub.die('review needs --evidence: the test, build and lint commands you ran and their results');
+    step(t, 'in-progress', 'review');
+    t.evidence = args.evidence; t.checks = {};
+    save(t, 'to review');
+    process.stdout.write(`${tid} review (checks needed: ${(t.checks_required || ['code']).join(', ')})\n`);
+    break;
+  }
+  case 'check': {
+    const t = load(tid);
+    const [, , kind, result] = args._;
+    if (!['code', 'security', 'qa'].includes(kind) || !['pass', 'fail'].includes(result)) hub.die('usage: task check <id> <code|security|qa> <pass|fail> --note "..."');
+    if (t.status !== 'review') hub.die(`${tid} is ${t.status}, not in review`);
+    if (!(t.checks_required || ['code']).includes(kind)) hub.die(`${tid} does not need a ${kind} check`);
+    if (me.agent && me.agent === t.owner) hub.die('you cannot check your own task');
+    if (result === 'fail' && !args.note) hub.die('a failed check needs --note with the findings');
+    t.checks = { ...(t.checks || {}), [kind]: { result, by: me.agent || 'ceo', at: hub.nowIso(), note: args.note || '' } };
+    if (result === 'fail') {
+      t.status = 'in-progress';
+      t.review_loops = (t.review_loops || 0) + 1;
+      save(t, `${kind} check failed`, { reason: args.note });
+      const { execFileSync } = require('child_process');
+      execFileSync(process.execPath, [path.join(__dirname, 'tell'), t.owner || '', `${tid} failed the ${kind} check: ${args.note}`, '--from', me.agent || 'reviewer']);
+      process.stdout.write(`${tid} ${kind} check failed; sent back to ${t.owner} (review loop ${t.review_loops})\n`);
+      if (t.review_loops > 5) process.stdout.write('WARNING: more than 5 review loops. The lead should ask the CEO.\n');
+    } else {
+      save(t, `${kind} check passed`);
+      const missing = (t.checks_required || ['code']).filter((k) => !(t.checks[k] && t.checks[k].result === 'pass'));
+      process.stdout.write(`${tid} ${kind} check passed${missing.length ? `; still needed: ${missing.join(', ')}` : '; all checks passed, ready for the lead'}\n`);
+    }
+    break;
+  }
   case 'done': {
     const t = load(tid);
     if (!args.evidence) hub.die('done needs --evidence (what was verified, e.g. "npm test: 48 passed")');
+    const missing = (t.checks_required || ['code']).filter((k) => !(t.checks && t.checks[k] && t.checks[k].result === 'pass'));
+    if (missing.length) hub.die(`${tid} still needs these checks to pass: ${missing.join(', ')}`);
     step(t, 'review', 'done');
     t.evidence = args.evidence; t.done_at = hub.nowIso();
     save(t, 'done');

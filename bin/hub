@@ -33,7 +33,7 @@ if (cmd === 'start') {
   const folder = path.resolve(a._[0] || process.cwd());
   const project = a.project || path.basename(folder).toLowerCase().replace(/[^a-z0-9-]+/g, '-');
   const agents = String(a.agents || 'lead,builder').split(',').map((s) => s.trim()).filter(Boolean)
-    .map((name) => ({ name, role: name.startsWith('lead') ? 'lead' : (name.startsWith('design') ? 'designer' : 'dev') }));
+    .map((name) => ({ name, role: hub.roleOf(name) }));
   let brief = '';
   if (a.brief) brief = fs.readFileSync(path.resolve(a.brief), 'utf8');
   try {

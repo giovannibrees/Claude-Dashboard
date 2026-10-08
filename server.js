@@ -136,7 +136,7 @@ function connectProject(body) {
   const folder = String(body.folder || '').trim().replace(/^~(?=\/|$)/, require('os').homedir());
   const project = hub.slug(body.project || path.basename(folder));
   const agents = String(body.agents || 'lead,builder').split(',').map((s) => s.trim()).filter(Boolean)
-    .map((name) => ({ name, role: name.startsWith('lead') ? 'lead' : (name.startsWith('design') ? 'designer' : 'dev') }));
+    .map((name) => ({ name, role: hub.roleOf(name) }));
   try {
     const r = require('./lib/connect').connect({ folder, project, agents, brief: String(body.brief || ''), createFolder: true });
     return [200, { ok: true, ...r }];

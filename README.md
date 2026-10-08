@@ -14,7 +14,8 @@ Two versions:
 - **Local version.** A small server on your own computer, with instant answer delivery
   through Claude Code hooks. Needs Node.js.
 
-The full guide is the [manual](docs/MANUAL.md).
+The full guide is the [manual](docs/MANUAL.md). Teams of specialized agents (builders, code
+reviewer, security, QA, designer) are explained in the [team guide](docs/TEAMS.md).
 
 ## Artifact version
 
@@ -25,6 +26,7 @@ Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for 
 1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
+4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
 Then give me the link.
 ```
 

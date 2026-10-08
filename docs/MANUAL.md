@@ -39,6 +39,7 @@ Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for 
 1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
+4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
 Then give me the link.
 ```
 
@@ -52,7 +53,9 @@ The page is private: only you can open it. To give a colleague access, use the p
 1. Open your Agent Hub and click **Add project**.
 2. Fill in:
    - **Project name**: short, for example `gym-app`.
-   - **Agents**: `lead, builder` is a good start. Add `designer` or `builder-2` for more hands.
+   - **Team**: Solo, Standard (with a code reviewer and a security agent), Product (with a
+     designer and QA) or Secure (everything). See the [team guide](TEAMS.md) for which to pick.
+   - **Priority**: P1, P2 or P3.
    - **GitHub repo or folder** (optional): where the code lives.
    - **Brief**: what the app is, who it is for, must-have features, what is out of scope, deadline.
 3. Click **Create project**. You get one start line per agent, each with a Copy button.
@@ -146,6 +149,11 @@ it and read your answers from it with Claude Code's artifact tools. The rules th
 stored in the same database, so every agent always reads the current version.
 
 ## 7. The rules agents follow
+
+Each agent also follows its role card in [ROLES.md](../ROLES.md). Every task has to pass its
+checks (code review always, security and QA where needed) before the lead can close it.
+The [team guide](TEAMS.md) explains the teams, how work is split and the checks.
+
 
 The full text is [cloud/PROTOCOL.md](../cloud/PROTOCOL.md). In short:
 
