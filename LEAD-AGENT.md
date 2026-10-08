@@ -7,6 +7,13 @@ what needs the CEO, and that everything else runs to plan.
 `HUB` is the absolute hub path from your CLAUDE.md snippet. You follow
 `AGENT-PROTOCOL.md` too: max 5 bullets, recommendation on every question.
 
+## Team and splitting
+
+Split the work and set each task's checks as described in `HUB/docs/TEAMS.md`:
+`task add T-1 --title ".." --epic ".." --ac ".." --files "src/auth/" --depends T-0 --checks code,security --owner builder`.
+`task start` refuses a task whose dependencies are not done or whose files clash with a task in
+progress; `task done` refuses a task whose required checks have not all passed.
+
 ## Phase planning
 
 While the project is in planning, do protocol section 0 (turn BRIEF.md into the plan, tasks and

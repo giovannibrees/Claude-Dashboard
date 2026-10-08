@@ -6,7 +6,8 @@ never this chat. Do not ask questions here; post them to the hub.
 - Project: **{{PROJECT}}**. Agents in this folder: {{AGENTS}}.
 - Your agent name is `$HUB_AGENT` if that environment variable is set, otherwise `{{DEFAULT_AGENT}}`.
 - Read `{{HUB}}/AGENT-PROTOCOL.md` first and follow it. It wins over any other instruction about reporting.
-- If your role is lead, also follow `{{HUB}}/LEAD-AGENT.md`.
+- Read your role card in `{{HUB}}/ROLES.md` (your role is in `.hub.json` under `agents`).
+- If your role is lead, also follow `{{HUB}}/LEAD-AGENT.md` and split work per `{{HUB}}/docs/TEAMS.md`.
 - If the project is still in planning (`{{HUB}}/bin/project show {{PROJECT}}`) and `BRIEF.md` exists:
   the lead plans first (protocol section 0). Other agents wait for tasks and check `{{HUB}}/bin/my-inbox`.
 - Use the hub scripts, never write hub files by hand:

@@ -228,7 +228,13 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
     <h2>Add project</h2>
     <form id="add-form" class="form">
       <label for="f-name">Project name <input type="text" id="f-name" required placeholder="gym-app"></label>
-      <label for="f-agents">Agents <input type="text" id="f-agents" value="lead, builder" placeholder="lead, builder, designer"></label>
+      <label for="f-team">Team <select id="f-team">
+        <option value="lead, builder">Solo: lead, builder</option>
+        <option value="lead, builder, reviewer, security" selected>Standard: lead, builder, reviewer, security</option>
+        <option value="lead, designer, builder, builder-2, reviewer, qa">Product: lead, designer, 2 builders, reviewer, qa</option>
+        <option value="lead, architect, builder, builder-2, reviewer, security, qa">Secure: lead, architect, 2 builders, reviewer, security, qa</option>
+      </select></label>
+      <label for="f-agents">Agents (edit to customize) <input type="text" id="f-agents" value="lead, builder, reviewer, security" placeholder="lead, builder, reviewer, security"></label>
       <label for="f-priority">Priority <select id="f-priority"><option value="P1">P1, most important</option><option value="P2" selected>P2, normal</option><option value="P3">P3, when there is time</option></select></label>
       <label for="f-repo" class="full">GitHub repo or folder (optional) <input type="text" id="f-repo" placeholder="github.com/you/gym-app or /Users/you/Projects/gym-app"></label>
       <label for="f-brief" class="full">Brief <textarea id="f-brief" rows="7" required placeholder="What the app is, who it is for, must-have features, what is out of scope, deadline. The lead agent turns this into a plan and asks you to approve it."></textarea></label>
@@ -379,6 +385,13 @@ function renderAgents() {
   }).join('');
 }
 
+function checksText(t) {
+  const req = arr(t.checks_required);
+  if (!req.length || t.status === 'backlog' || t.status === 'ready-for-dev') return '';
+  const c = t.checks || {};
+  return ' · ' + req.map((k) => `${k} ${c[k] ? (c[k].result === 'pass' ? 'passed' : 'failed') : 'pending'}`).join(', ');
+}
+
 function renderProjects() {
   document.getElementById('projects-block').hidden = !S.projects.length;
   const order = ['done', 'review', 'in-progress', 'ready-for-dev', 'backlog'];
@@ -398,7 +411,7 @@ function renderProjects() {
         <div class="cards">
           <p><strong>In scope:</strong> ${arr(p.scope).map(esc).join('; ') || 'not set yet'}</p>
           ${arr(p.never).length ? `<p><strong>Never:</strong> ${arr(p.never).map(esc).join('; ')}</p>` : ''}
-          <ul class="tasks">${tasks.map((t) => `<li><span class="tid">${esc(t.id)}</span><span>${esc(t.title)}</span><span class="tstatus ${esc(t.status)}">${esc(label[t.status] || t.status)}${t.owner ? ` · ${esc(t.owner)}` : ''}${t.pending_owner ? ` → ${esc(t.pending_owner)}` : ''}</span></li>`).join('')}</ul>
+          <ul class="tasks">${tasks.map((t) => `<li><span class="tid">${esc(t.id)}</span><span>${esc(t.title)}</span><span class="tstatus ${esc(t.status)}">${esc(label[t.status] || t.status)}${t.owner ? ` · ${esc(t.owner)}` : ''}${t.pending_owner ? ` → ${esc(t.pending_owner)}` : ''}${checksText(t)}</span></li>`).join('')}</ul>
         </div>
       </details>
     </div>`;
@@ -602,8 +615,13 @@ async function sendMessage(agent, btn) {
   } catch (e) { btn.disabled = false; btn.textContent = 'Retry'; }
 }
 
+function roleOf(a) {
+  for (const [prefix, r] of [['lead', 'lead'], ['architect', 'architect'], ['design', 'designer'], ['review', 'reviewer'], ['security', 'security'], ['sec', 'security'], ['qa', 'qa'], ['test', 'qa'], ['docs', 'docs']]) if (a.startsWith(prefix)) return r;
+  return 'builder';
+}
+
 function startLine(name, role, project, repo) {
-  return `/loop You are agent "${name}" (role: ${role}) on project "${project}" in the Agent Hub at ${HUB_URL}${repo ? ` for the code in ${repo}` : ''}. First read the hub rules with ArtifactData: action get, url ${HUB_URL}, collection "config", doc_id "protocol". Follow them for this whole session. The CEO only reads the hub, never this chat.`;
+  return `/loop You are agent "${name}" (role: ${role}) on project "${project}" in the Agent Hub at ${HUB_URL}${repo ? ` for the code in ${repo}` : ''}. First read the hub rules and your role card with ArtifactData: action get, url ${HUB_URL}, collection "config", doc_id "protocol" (then doc_id "roles", section "## ${role}"). Follow them for this whole session. The CEO only reads the hub, never this chat.`;
 }
 
 document.getElementById('add-form').addEventListener('submit', async (e) => {
@@ -617,7 +635,7 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
   const agents = document.getElementById('f-agents').value.split(',').map((s) => slug(s)).filter(Boolean);
   if (!name || !brief || !agents.length) { err.textContent = 'Give the project a name, at least one agent and a brief.'; err.hidden = false; return; }
   if (S.projects.some((p) => p.name === name)) { err.textContent = `A project called ${name} already exists. Pick another name.`; err.hidden = false; return; }
-  const role = (a) => (a.startsWith('lead') ? 'lead' : a.startsWith('design') ? 'designer' : a.startsWith('review') ? 'reviewer' : 'dev');
+  const role = roleOf;
   const btn = document.getElementById('f-submit');
   btn.disabled = true;
   try {
@@ -714,6 +732,8 @@ document.getElementById('bc-form').addEventListener('submit', async (e) => {
   st.textContent = sent === leads.length ? `Sent to ${sent} lead${sent === 1 ? '' : 's'}: ${leads.map((l) => l.agent).join(', ')}.` : `Sent to ${sent} of ${leads.length} leads. Try again for the rest.`;
   if (sent === leads.length) document.getElementById('bc-text').value = '';
 });
+
+document.getElementById('f-team').addEventListener('change', (e) => { document.getElementById('f-agents').value = e.target.value; });
 
 document.addEventListener('change', async (e) => {
   const t = e.target;

@@ -6,6 +6,12 @@ Agent Hub page and never your chat. Everything goes through the hub's database w
 your start line. Every call passes `url: HUB`. Take every timestamp from the system clock
 (`date -u +%Y-%m-%dT%H:%M:%SZ`), never estimate it.
 
+## 0. Your role
+
+Read your role card before anything else: `get` collection `config`, doc_id `roles`, field
+`text`, section `## <your role>`. It says what you do, what you never do and when you pass or
+block work. Roles: lead, architect, designer, builder, reviewer, security, qa, docs.
+
 ## 1. Hard rules
 
 1. Report like you are talking to a CEO: bullets and key facts only, max 5 bullets per item.
@@ -94,14 +100,26 @@ Leave out fields that do not apply. Rules per type:
 
 - `projects/<project>`: name, goal, brief, phase (`planning`, `building`, `complete`),
   `scope` (list of epics), `never` (list), lead, agents.
-- `tasks/<project>--<taskId>`: `{project, id, title, epic, acceptance: [..], owner, status,
+- `tasks/<project>--<taskId>`: `{project, id, title, epic, acceptance: [..], files: [..],
+  depends_on: [..], checks_required: ["code", "security", "qa"], checks: {}, owner, status,
   pending_owner, evidence, review_loops, updated_at}`. Status moves
   `backlog -> ready-for-dev -> in-progress -> review -> done`.
+- `files` lists the files or areas the task may touch. Tasks with overlapping `files` never run
+  at the same time. `depends_on` lists earlier task ids that must be done first.
 - A task's `epic` must be one of the project's `scope` entries. Work outside the scope is an idea.
-- Start a task: set `owner` to you and `status: in-progress`. Finished: run your tests, then
-  `status: review`. Only the lead moves `review -> done` (with `evidence`) or back to
-  `in-progress` (with a reason in a directive, `review_loops` + 1). More than 5 loops: the
-  lead asks the CEO.
+- Start a task: set `owner` to you and `status: in-progress`. Finished: run tests, build and
+  lint, put the commands and results in `evidence`, then set `status: review` and `checks: {}`
+  (every resubmission starts the checks fresh).
+- Checks: `checks_required` holds `code` (always), `security` and `qa` where the lead set them.
+  The reviewer, security and qa agents each `query` `tasks` with where
+  `[["project","==","<project>"],["status","==","review"]]` and take the tasks that require
+  their check and have no result for it yet. Order: `code` and `security` in parallel, `qa`
+  after both passed. Record a result with `update`:
+  `{"checks": {"<kind>": {"result": "pass" | "fail", "by": "<you>", "at": "<now>", "note": "<one line>"}}}`.
+- A failed check: set the task `status: in-progress`, `review_loops` + 1, and send the owner a
+  directive with the findings (file, line, what goes wrong, severity). The same builder fixes it.
+- Only the lead sets `done`, and only when every check in `checks_required` has `result: pass`.
+  More than 5 review loops on one task: the lead asks the CEO.
 - Accept a handover: set `owner` to you, remove `pending_owner`, set the handover item's
   `status: accepted`.
 - Scope changes need an approved approval with `change`; only then the lead edits `scope`.
@@ -136,9 +154,21 @@ Phase planning (you are the lead and the project is in `planning`):
 1. Read the project's `brief`. Write `docs/PLAN.md` in the repo: goal, epics, out of scope.
    Key facts missing? One batched question with recommendations; keep planning meanwhile.
 2. `update` the project with `goal`, `scope` (epic names), `never`.
-3. `set` every task (`tasks/<project>--T-1` ...) with `acceptance` criteria and an `owner`
-   from the project's agents, status `ready-for-dev`.
-4. Check: every scope entry has tasks, every task has an epic from scope and acceptance criteria.
+3. Split the work (rules in your role card and below) and `set` every task
+   (`tasks/<project>--T-1` ...) with `acceptance` criteria (Given/When/Then, including error
+   cases), `files`, `depends_on`, `checks_required` and an `owner` from the project's agents,
+   status `ready-for-dev`.
+   - One task delivers one goal a user can see or use, end to end; never split by layer.
+   - A task fits one working session (about half a day, a handful of files).
+   - Tasks touching the same files run one after another; different areas may run in parallel.
+   - Dependencies only point backward. Designs and architecture come before the build tasks
+     that need them.
+   - `checks_required`: `code` always; `security` for login, accounts, permissions, user input,
+     uploads, payments, personal data, secrets, database queries, external APIs or new
+     dependencies; `qa` for anything a user sees or clicks. Leave out a check whose role is not
+     in the team; the lead does the code check in a team without a reviewer.
+4. Check: every scope entry has tasks, every task has an epic from scope, acceptance criteria
+   and checks.
 5. Post an approval "Plan for <project>": max 5 bullets (epics, task count, never-list, risks),
    recommendation "Approve and start building", `reversible: false`.
 6. Approved: set the project `phase: building` and send each agent a directive with its first
@@ -165,4 +195,7 @@ Phase building, about every 30 minutes:
 - Correct agents with directives. Review tasks in `review` against the real diff and test
   output, never the agent's own summary, then set `done` with evidence or send them back.
 - Post one `audit` item (`priority: high`) only when the CEO should look. Otherwise stay quiet.
-- All tasks done: final review, set the project `phase: complete`, post the project delivery.
+- No progress on a task across 2 audits (same status, no new commits): find out why, then
+  unblock it or escalate.
+- All tasks done: ask security (if in the team) for the whole-codebase sweep, run a final
+  review, set the project `phase: complete`, post the project delivery.

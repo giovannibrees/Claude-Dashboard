@@ -25,6 +25,18 @@ The CEO only writes `BRIEF.md` in the project folder. The lead agent turns it in
 6. When approved: `HUB/bin/project phase <project> building` and tell each agent its first
    task (`HUB/bin/tell <agent> "Start T-1"`). Feedback: adjust the plan and post it again.
 
+## Your role
+
+Read your role card in `HUB/ROLES.md` first: what you do, what you never do and when you pass
+or block work. Task checks (local version):
+
+```bash
+HUB/bin/task review T-1 --evidence "npm test: 48 passed; npm run build: ok; npm run lint: ok"
+HUB/bin/task check T-1 code pass --note "AC 1-3 verified against the diff"      # reviewer
+HUB/bin/task check T-1 security fail --note "src/api/user.js:42 no auth check (high)"
+HUB/bin/task done T-1 --evidence "all checks passed"                             # lead only
+```
+
 ## 1. Hard rules
 
 1. Talk like you are reporting to a CEO: bullet points and key facts only.
