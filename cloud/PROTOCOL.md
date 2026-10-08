@@ -12,6 +12,8 @@ your start line. Every call passes `url: HUB`. Take every timestamp from the sys
    No logs, no history, no long text.
 2. Never post a stream of questions. Batch related questions into ONE item with numbered
    bullets (max 5) and post it only when you cannot proceed. Max 3 open questions per agent.
+   Questions go ONLY in `question` or `approval` items, never inside a status or delivery:
+   the CEO answers from the Needs you list, and a question hidden in an update gets missed.
 3. Every question and approval has `recommendation`: the answer you would pick, one sentence.
    For batched questions also give `recommendations`, one per numbered bullet.
 4. Screenshots for anything UI or design related (section 6). Color tables (`colors`) for
@@ -22,6 +24,8 @@ your start line. Every call passes `url: HUB`. Take every timestamp from the sys
    recommendation after 4 hours (section 5). Not reversible (deleting, payments, anything
    public-facing, production data) or a scope change: wait for the CEO. No exceptions.
 7. When your work is delivered, post a delivery item and stop. Do not invent new work.
+   You may stop with questions still open: never keep looping only to wait for an answer.
+   The lead picks up answers you have not read (section 7).
 8. Work only on tasks from the plan. New ideas and unplanned features become `idea` items
    and wait until the build is complete. Never build them on the side.
 9. Post a status item at least every 2 hours while working.
@@ -39,8 +43,9 @@ You run inside `/loop`. Each iteration, in this order:
 3. Directives: `query` collection `directives` with where `[["to","==","<you>"],["read","==",false]]`.
    Act on each, then mark `{"read": true}`.
 4. Work on your current task. Post items as needed.
-5. Pace the loop: about 5 minutes while waiting on answers or in planning, longer while busy
-   with a long task, about 30 minutes for the lead's audits.
+5. Pace the loop to keep cost low: about 5 minutes in planning, longer while busy with a long
+   task, about 30 minutes for the lead's audits. Blocked on everything and only waiting for
+   answers: about 60 minutes between checks. Delivered: end the loop.
 
 ## 3. Posting items
 
@@ -139,6 +144,18 @@ Phase planning (you are the lead and the project is in `planning`):
 6. Approved: set the project `phase: building` and send each agent a directive with its first
    task (`directives`: `{to, project, from: "<you>", text, timestamp, read: false}`).
    Feedback: adjust and post the plan again.
+
+Every check, any phase:
+- Broadcasts: a directive with a `broadcast` field comes from the CEO to all leads. Act on it,
+  pass it on to your agents with a directive where it applies, and mark it read.
+- Unread answers: `query` `answers` with where `[["project","==","<project>"],["read","==",false]]`.
+  For each answer older than 30 minutes whose agent is idle (`last_seen` over 30 minutes ago)
+  or delivered: take it over. Act on it yourself if it is small, or give the work to an active
+  agent with a directive. Then `update` the answer with `{"read": true, "handled_by": "<you>"}`.
+  If only the stopped agent can do it, post an `audit` item (`priority: high`) titled
+  "<agent> stopped with an answer waiting" with the line the CEO should paste to restart it.
+- Priorities: projects have `priority` P1, P2 or P3 set by the CEO. Work and escalations for
+  P1 projects come first.
 
 Phase building, about every 30 minutes:
 - Read `agents`, `tasks`, open `items` and the repo's git log. Look for: an agent idle over

@@ -59,6 +59,7 @@ button:focus-visible, input:focus, select:focus, textarea:focus, summary:focus-v
 .live { color: var(--bar-muted); font-size: 15px; display: inline-flex; align-items: center; gap: 7px; }
 .live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 .live.off::before { background: var(--idle); }
+.top-actions { display: flex; gap: 8px; }
 .top .btn { white-space: nowrap; padding: 8px 12px; background: transparent; color: var(--bar-fg); border-color: color-mix(in srgb, var(--bar-fg) 35%, transparent); }
 .top .btn:hover { border-color: var(--bar-fg); }
 
@@ -173,6 +174,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--sunk); }
 .legend i.done { background: var(--ok); } .legend i.review { background: var(--ink); } .legend i.in-progress { background: var(--accent); }
 .project summary { color: var(--accent); font-size: 15px; }
+.prio { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.prio select { min-width: 0; padding: 4px 8px; font-size: 14px; }
 .tasks { list-style: none; padding: 0; margin: 0; }
 .tasks li { padding: 7px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 0 10px; font-size: 15px; }
 .tid { font-family: var(--mono); font-size: 13px; color: var(--muted); padding-top: 2px; }
@@ -197,7 +200,7 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 <header class="top">
   <div class="wrap top-row">
     <div class="brand"><h1>Agent Hub</h1><span class="live off" id="refreshed">Connecting</span></div>
-    <button type="button" class="btn" id="add-toggle">Add project</button>
+    <div class="top-actions"><button type="button" class="btn" id="bc-toggle">Message all leads</button><button type="button" class="btn" id="add-toggle">Add project</button></div>
   </div>
 </header>
 
@@ -211,11 +214,22 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
     <button type="button" class="tile" data-jump="ideas-block"><b id="t-ideas">0</b><span>Ideas parked</span></button>
   </nav>
 
+  <section class="panel" id="bc-panel" hidden>
+    <h2>Message all leads</h2>
+    <form id="bc-form" class="form">
+      <label for="bc-text" class="full">Every project lead gets this on its next check (within about 30 minutes) and passes it on to its agents where it applies.
+        <textarea id="bc-text" rows="3" maxlength="800" required placeholder="Example: pause all deploys until Monday; the payment provider is changing."></textarea></label>
+      <div class="actions full"><button class="btn primary" type="submit" id="bc-send">Send to all leads</button><button class="btn" type="button" id="bc-cancel">Cancel</button></div>
+      <p class="hint full" id="bc-status" hidden></p>
+    </form>
+  </section>
+
   <section class="panel" id="add-panel" hidden>
     <h2>Add project</h2>
     <form id="add-form" class="form">
       <label for="f-name">Project name <input type="text" id="f-name" required placeholder="gym-app"></label>
       <label for="f-agents">Agents <input type="text" id="f-agents" value="lead, builder" placeholder="lead, builder, designer"></label>
+      <label for="f-priority">Priority <select id="f-priority"><option value="P1">P1, most important</option><option value="P2" selected>P2, normal</option><option value="P3">P3, when there is time</option></select></label>
       <label for="f-repo" class="full">GitHub repo or folder (optional) <input type="text" id="f-repo" placeholder="github.com/you/gym-app or /Users/you/Projects/gym-app"></label>
       <label for="f-brief" class="full">Brief <textarea id="f-brief" rows="7" required placeholder="What the app is, who it is for, must-have features, what is out of scope, deadline. The lead agent turns this into a plan and asks you to approve it."></textarea></label>
       <div class="actions full"><button class="btn primary" type="submit" id="f-submit">Create project</button><button class="btn" type="button" id="add-cancel">Cancel</button></div>
@@ -288,7 +302,7 @@ const MEANING = {
 };
 
 let db = null;
-const S = { items: [], agents: [], projects: [], tasks: [] };
+const S = { items: [], agents: [], projects: [], tasks: [], unread: [] };
 const drafts = {};
 const msgDrafts = {};
 let filters = { agent: '', project: '', type: '' };
@@ -316,6 +330,9 @@ function passes(it) {
   return (!filters.agent || it.agent === filters.agent || it.to_agent === filters.agent)
     && (!filters.project || it.project === filters.project) && (!filters.type || it.type === filters.type);
 }
+const PRIO_RANK = { P1: 0, P2: 1, P3: 2 };
+function projectPrio(name) { const p = S.projects.find((x) => x.name === name); return (p && p.priority) || 'P2'; }
+function unreadFor(id) { return S.unread.find((a) => a.item_id === id || a.id === id); }
 function arr(x) { return Array.isArray(x) ? x : (x ? [x] : []); }
 
 // Items are written by agents: check the protocol so problems are visible on the card.
@@ -327,6 +344,7 @@ function violations(it) {
   if ((it.type === 'question' || it.type === 'approval') && typeof it.reversible !== 'boolean') v.push('reversible not set');
   if (it.type === 'delivery' && !arr(it.verification).length) v.push('no test evidence');
   if (it.type === 'delivery' && !arr(it.links).length) v.push('no link to the result');
+  if ((it.type === 'status' || it.type === 'delivery') && /\?/.test([it.title].concat(arr(it.bullets)).join(' '))) v.push('contains a question; questions need their own card so they reach Needs you');
   return v;
 }
 
@@ -344,7 +362,9 @@ function renderAgents() {
     const waiting = openBy.has(a.agent);
     const when = running ? ago(a.last_seen) : ms(a.last_seen) ? `idle, ${ago(a.last_seen)}` : 'not started';
     const sub = `${esc(a.project || '')}${a.role ? ` · ${esc(a.role)}` : ''}${a.current_task ? ` · ${esc(a.current_task)}` : ''}`;
+    const pending = S.unread.filter((x) => x.agent === a.agent).length;
     const third = waiting ? '<p class="waiting-text">Waiting on you</p>'
+      : pending ? `<p>${pending} answer${pending === 1 ? '' : 's'} not picked up yet</p>`
       : a.state === 'delivered' && !running ? '<p>Delivered</p>'
       : a.last_status_title ? `<p title="${esc(a.last_status_title)}">${esc(a.last_status_title)}</p>` : '';
     const open = Object.prototype.hasOwnProperty.call(msgDrafts, a.agent);
@@ -363,13 +383,14 @@ function renderProjects() {
   document.getElementById('projects-block').hidden = !S.projects.length;
   const order = ['done', 'review', 'in-progress', 'ready-for-dev', 'backlog'];
   const label = { done: 'done', review: 'in review', 'in-progress': 'in progress', 'ready-for-dev': 'ready', backlog: 'backlog' };
-  document.getElementById('projects').innerHTML = S.projects.map((p) => {
+  document.getElementById('projects').innerHTML = S.projects.slice().sort((a, b) => PRIO_RANK[a.priority || 'P2'] - PRIO_RANK[b.priority || 'P2'] || String(a.name).localeCompare(String(b.name))).map((p) => {
     const tasks = S.tasks.filter((t) => t.project === p.name).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     const n = Object.fromEntries(order.map((st) => [st, tasks.filter((t) => t.status === st).length]));
     const ideas = S.items.filter((i) => i.type === 'idea' && i.project === p.name && ['parked', 'kept'].includes(i.status)).length;
     const seg = tasks.length ? order.filter((st) => n[st]).map((st) => `<span class="${st}" style="width:${(n[st] / tasks.length) * 100}%"></span>`).join('') : '';
     return `<div class="project">
       <div class="project-top"><h3>${esc(p.name)}</h3><span class="chip${p.phase === 'building' ? ' soft' : ''}">${esc(p.phase || 'planning')}</span></div>
+      <label class="prio" for="prio-${esc(p.name)}">Priority <select id="prio-${esc(p.name)}" data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${(p.priority || 'P2') === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
       ${p.goal ? `<p>${esc(p.goal)}</p>` : ''}
       <div class="seg" role="img" aria-label="${n.done} of ${tasks.length} tasks done">${seg}</div>
       <div class="legend">${tasks.length ? order.filter((st) => n[st]).map((st) => `<span><i class="${st}"></i>${n[st]} ${label[st]}</span>`).join('') : `<span>${p.phase === 'planning' ? 'The lead is writing the plan' : 'No tasks yet'}</span>`}${ideas ? `<span>${ideas} idea${ideas === 1 ? '' : 's'} parked</span>` : ''}</div>
@@ -435,7 +456,7 @@ function cardHtml(it, opts) {
   if (it.task) meta.push(`task ${it.task}`);
   if (it.reply_to) meta.push('follow-up');
   const parts = [`<h3>${esc(it.title)}</h3>`,
-    `<p class="meta"><span class="chip">${esc(TYPE_LABEL[it.type] || it.type)}</span>${it.priority === 'high' ? '<span class="chip hot">High priority</span>' : ''}${it.change ? `<span class="chip soft">Scope change: ${esc(it.change)}</span>` : ''}<span>${meta.slice(1).map(esc).join(' · ')}</span></p>`,
+    `<p class="meta"><span class="chip">${esc(TYPE_LABEL[it.type] || it.type)}</span>${it.needs_me && it.status === 'open' && projectPrio(it.project) === 'P1' ? '<span class="chip soft">P1 project</span>' : ''}${it.priority === 'high' ? '<span class="chip hot">High priority</span>' : ''}${it.change ? `<span class="chip soft">Scope change: ${esc(it.change)}</span>` : ''}<span>${meta.slice(1).map(esc).join(' · ')}</span></p>`,
     bulletsHtml(it)];
   const links = arr(it.links);
   if (links.length) parts.push(`<ul>${links.map((l) => { const u = safeUrl(l); return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>` : esc(l)}</li>`; }).join('')}</ul>`);
@@ -462,7 +483,8 @@ function cardHtml(it, opts) {
         ${arr(it.bullets).length > 1 ? '<p class="hint">Answer per number, for example: 1 yes, 2 no, 3 use option B</p>' : ''}`);
     }
   } else if (it.answer) {
-    parts.push(`<p class="answer"><strong>${esc(DECISION_LABEL[it.answer.decision] || it.answer.decision)}</strong> ${ago(it.answer.at)}${it.answer.text ? `: ${esc(it.answer.text)}` : ''}</p>`);
+    const un = unreadFor(it.id);
+    parts.push(`<p class="answer"><strong>${esc(DECISION_LABEL[it.answer.decision] || it.answer.decision)}</strong> ${ago(it.answer.at)}${it.answer.text ? `: ${esc(it.answer.text)}` : ''}${un ? `<br><span class="hint">Not picked up yet${Date.now() - ms(it.answer.at) > 30 * 60000 ? '. The lead takes it over on its next check' : ''}.</span>` : ''}</p>`);
   }
   if (opts.ack) parts.push(`<div class="actions"><button class="btn primary" data-act="acknowledge" data-id="${esc(it.id)}">Acknowledge</button></div>`);
   if (opts.idea) parts.push(`<div class="actions">${it.status === 'kept' ? '<span class="count">Kept for after the build</span>' : `<button class="btn" data-act="keep_idea" data-id="${esc(it.id)}">Keep for later</button>`}<button class="btn" data-act="acknowledge" data-id="${esc(it.id)}">Drop</button></div>`);
@@ -481,7 +503,10 @@ function render() {
 
   renderFilters(); renderAgents(); renderProjects();
   const items = S.items.filter(passes);
-  const needs = items.filter((i) => i.needs_me && i.status === 'open').sort((x, y) => (x.priority === y.priority ? ms(y.timestamp) - ms(x.timestamp) : x.priority === 'high' ? -1 : 1));
+  const needs = items.filter((i) => i.needs_me && i.status === 'open').sort((x, y) =>
+    (PRIO_RANK[projectPrio(x.project)] - PRIO_RANK[projectPrio(y.project)])
+    || ((x.priority === 'high' ? 0 : 1) - (y.priority === 'high' ? 0 : 1))
+    || (ms(x.timestamp) - ms(y.timestamp)));
   const deliveries = items.filter((i) => i.type === 'delivery' && i.status === 'open');
   const flags = items.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info');
   const ideas = items.filter((i) => i.type === 'idea' && ['parked', 'kept'].includes(i.status));
@@ -597,7 +622,7 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
   btn.disabled = true;
   try {
     const now = new Date().toISOString();
-    await db.doc(`projects/${name}`).set({ name, goal: brief.split('\n')[0].replace(/^#+\s*/, '').slice(0, 160), brief, repo, phase: 'planning',
+    await db.doc(`projects/${name}`).set({ name, goal: brief.split('\n')[0].replace(/^#+\s*/, '').slice(0, 160), brief, repo, phase: 'planning', priority: document.getElementById('f-priority').value,
       scope: [], never: [], lead: agents.find((a) => role(a) === 'lead') || '', agents: agents.map((a) => ({ name: a, role: role(a) })), created_at: now });
     for (const a of agents) await db.doc(`agents/${a}`).set({ agent: a, project: name, role: role(a), registered_at: now, state: 'registered' });
     const out = document.getElementById('add-result');
@@ -642,6 +667,9 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.msgOpen) { msgDrafts[t.dataset.msgOpen] = ''; render(); const i = document.querySelector(`[data-msg-input="${CSS.escape(t.dataset.msgOpen)}"]`); if (i) i.focus(); return; }
   if (t.dataset.msgSend) { sendMessage(t.dataset.msgSend, t); return; }
   if (t.dataset.jump) { const el = document.getElementById(t.dataset.jump); if (el) { const d = el.querySelector('details'); if (d) d.open = true; el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); } return; }
+  if (t.id === 'bc-toggle') { const p = document.getElementById('bc-panel'); p.hidden = !p.hidden; document.getElementById('add-panel').hidden = true; if (!p.hidden) document.getElementById('bc-text').focus(); return; }
+  if (t.id === 'bc-cancel') { document.getElementById('bc-panel').hidden = true; return; }
+  if (t.id === 'add-toggle') { document.getElementById('bc-panel').hidden = true; }
   if (t.id === 'add-toggle') { const p = document.getElementById('add-panel'); p.hidden = !p.hidden; if (!p.hidden) document.getElementById('f-name').focus(); return; }
   if (t.id === 'add-cancel') { document.getElementById('add-panel').hidden = true; return; }
   if (t.id === 'flt-clear') { filters = { agent: '', project: '', type: '' }; saveFilters(); render(); return; }
@@ -666,6 +694,33 @@ document.addEventListener('keydown', (e) => {
   if (t.dataset.fbInput) { e.preventDefault(); const b = document.querySelector(`[data-fb-send="${CSS.escape(t.dataset.fbInput)}"]`); if (b) b.click(); }
   if (t.dataset.msgInput) { e.preventDefault(); const b = document.querySelector(`[data-msg-send="${CSS.escape(t.dataset.msgInput)}"]`); if (b) b.click(); }
 });
+document.getElementById('bc-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = document.getElementById('bc-text').value.trim();
+  const st = document.getElementById('bc-status');
+  const leads = S.agents.filter((a) => a.role === 'lead');
+  st.hidden = false;
+  if (!db) { st.textContent = 'The database is not available here.'; return; }
+  if (!text) return;
+  if (!leads.length) { st.textContent = 'There are no lead agents yet. Add a project with a lead first.'; return; }
+  const btn = document.getElementById('bc-send');
+  btn.disabled = true;
+  const bid = `bc_${Date.now().toString(36)}`;
+  let sent = 0;
+  for (const l of leads) {
+    try { await db.collection('directives').add({ to: l.agent, project: l.project || '', from: 'ceo', text, broadcast: bid, timestamp: new Date().toISOString(), read: false }); sent++; } catch (x) { break; }
+  }
+  btn.disabled = false;
+  st.textContent = sent === leads.length ? `Sent to ${sent} lead${sent === 1 ? '' : 's'}: ${leads.map((l) => l.agent).join(', ')}.` : `Sent to ${sent} of ${leads.length} leads. Try again for the rest.`;
+  if (sent === leads.length) document.getElementById('bc-text').value = '';
+});
+
+document.addEventListener('change', async (e) => {
+  const t = e.target;
+  if (!t.dataset || !t.dataset.prio || !db) return;
+  try { await db.doc(`projects/${t.dataset.prio}`).update({ priority: t.value }); } catch (x) { t.closest('.project').insertAdjacentHTML('beforeend', '<p class="error">Could not save the priority. Try again.</p>'); }
+});
+
 document.getElementById('filters').addEventListener('change', (e) => {
   const key = { 'flt-agent': 'agent', 'flt-project': 'project', 'flt-type': 'type' }[e.target.id];
   if (key) { filters[key] = e.target.value; saveFilters(); render(); }
@@ -693,6 +748,7 @@ function subscribe(path, key, query) {
   subscribe('agents', 'agents', (c) => c.limit(200));
   subscribe('projects', 'projects', (c) => c.limit(100));
   subscribe('tasks', 'tasks', (c) => c.limit(1000));
+  subscribe('answers', 'unread', (c) => c.where('read', '==', false).limit(500));
   setInterval(render, 60000); // keeps "time ago", idle dots and 4-hour clocks current
 })();
 </script>
