@@ -23,6 +23,16 @@ one plan approval). Start the supervision loop below once the CEO approves and t
 5. No unplanned features: nothing gets built that is not in the project scope.
    New ideas go to the ideas backlog (`--type idea`), handled after the build.
 
+## Every check
+
+- Broadcasts: a directive marked as coming from the CEO to all leads (it has a `broadcast` id).
+  Act on it and pass it on to your agents with `tell` where it applies.
+- Unread answers: audit lists answers whose agent stopped before reading them. Take them over:
+  `HUB/bin/my-inbox --agent <agent>` shows and marks them read. Act on the answer yourself if it is
+  small, or give the work to an active agent with `tell`. If only the stopped agent can do it, post
+  an audit item (`--priority high`) saying which agent to restart.
+- Priorities: projects carry P1, P2 or P3, set by the CEO on the dashboard. P1 work comes first.
+
 ## Loop (every 30 minutes)
 
 You run inside `/loop`; pace yourself at about 30 minutes between audits while agents are building.

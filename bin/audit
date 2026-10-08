@@ -62,6 +62,17 @@ for (const it of inbox) {
 const perAgentOpen = {};
 for (const it of inbox) if (it.needs_me) perAgentOpen[it.agent] = (perAgentOpen[it.agent] || 0) + 1;
 
+// Answers the asking agent never read: it stopped or went idle. The lead takes these over.
+for (const f of hub.listJson(hub.DIRS.answers)) {
+  const ans = hub.readJson(path.join(hub.DIRS.answers, f));
+  if (!ans || (args.project && ans.project !== args.project) || ans.handled_by) continue;
+  const ag = agents.find((x) => x.agent === ans.agent);
+  if (!ag || (ag.seen_answers || []).includes(ans.item_id)) continue;
+  const waitedMin = hub.ageMinutes(ans.answered_at);
+  const gone = hub.ageMinutes(ag.last_activity_at || ag.last_seen) > hub.STALE_MINUTES || ag.state === 'offline' || ag.delivered_at;
+  if (waitedMin > 30 && gone) add('high', ans.project, ans.agent, `answer to "${ans.title}" unread for ${Math.round(waitedMin)} min and the agent has stopped: take it over (my-inbox --agent ${ans.agent})`);
+}
+
 // Tasks and projects
 for (const p of projects) {
   const ts = hub.listTasks(p.name);

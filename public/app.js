@@ -122,12 +122,14 @@ function renderAgents() {
 function renderProjects() {
   const el = document.getElementById('projects');
   document.getElementById('projects-block').hidden = !state.projects.length;
-  el.innerHTML = state.projects.map((p) => {
+  const rank = { P1: 0, P2: 1, P3: 2 };
+  el.innerHTML = state.projects.slice().sort((a, b) => rank[a.priority] - rank[b.priority] || a.name.localeCompare(b.name)).map((p) => {
     const pct = p.total ? Math.round((p.counts.done / p.total) * 100) : 0;
     const ideas = state.items.filter((i) => i.type === 'idea' && i.project === p.name && ['parked', 'kept'].includes(i.status)).length;
     const summary = ['in-progress', 'review', 'ready-for-dev', 'backlog'].filter((s) => p.counts[s]).map((s) => `${p.counts[s]} ${s}`).join(' · ');
     return `<div class="project">
       <div class="project-top"><h3>${esc(p.name)}</h3><span class="count">${esc(p.phase)} · ${p.counts.done}/${p.total} tasks done</span></div>
+      <p><label>Priority <select data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${p.priority === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label></p>
       <p>${esc(p.goal || '')}</p>
       <div class="bar" role="img" aria-label="${pct}% done"><span style="width:${pct}%"></span></div>
       <p>${summary || 'No open tasks'}${ideas ? ` · ${ideas} idea${ideas === 1 ? '' : 's'} parked` : ''}${p.lead ? ` · lead: ${esc(p.lead)}` : ''}</p>
@@ -276,8 +278,12 @@ function render() {
   renderProjects();
 
   const items = state.items.filter(passes);
+  const rank = { P1: 0, P2: 1, P3: 2 };
+  const prio = (name) => ((state.projects.find((p) => p.name === name) || {}).priority || 'P2');
   const needs = items.filter((i) => i.needs_me && i.status === 'open')
-    .sort((a, b) => (a.priority === b.priority ? b.timestamp.localeCompare(a.timestamp) : a.priority === 'high' ? -1 : 1));
+    .sort((a, b) => (rank[prio(a.project)] - rank[prio(b.project)])
+      || ((a.priority === 'high' ? 0 : 1) - (b.priority === 'high' ? 0 : 1))
+      || a.timestamp.localeCompare(b.timestamp));
   const deliveries = items.filter((i) => i.type === 'delivery' && i.status === 'open');
   const flags = items.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info');
   const ideas = items.filter((i) => i.type === 'idea' && ['parked', 'kept'].includes(i.status));
@@ -371,6 +377,25 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   if (t.dataset.fbInput) { e.preventDefault(); document.querySelector(`[data-fb-send="${CSS.escape(t.dataset.fbInput)}"]`).click(); }
   if (t.dataset.msgInput) { e.preventDefault(); document.querySelector(`[data-msg-send="${CSS.escape(t.dataset.msgInput)}"]`).click(); }
+});
+
+document.getElementById('bc-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const st = document.getElementById('bc-status');
+  const text = document.getElementById('bc-text').value.trim();
+  if (!text) return;
+  st.hidden = false;
+  try {
+    const r = await post('/api/broadcast', { text });
+    st.textContent = `Sent to ${r.leads.length} lead${r.leads.length === 1 ? '' : 's'}: ${r.leads.join(', ')}.`;
+    document.getElementById('bc-text').value = '';
+  } catch (x) { st.textContent = x.message; }
+});
+
+document.addEventListener('change', async (e) => {
+  const t = e.target;
+  if (!t.dataset || !t.dataset.prio) return;
+  try { await post('/api/priority', { project: t.dataset.prio, priority: t.value }); load(); } catch (x) { alert(`Could not save: ${x.message}`); }
 });
 
 document.getElementById('filters').addEventListener('change', (e) => {

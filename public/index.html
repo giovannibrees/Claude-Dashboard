@@ -17,6 +17,17 @@
   </div>
 </header>
 <main class="wrap">
+  <section class="block">
+    <details id="bc-details">
+      <summary><h2>Message all leads</h2></summary>
+      <form id="bc-form" class="add-form">
+        <label>Every project lead gets this right away (through its hooks) and passes it on to its agents where it applies.
+          <textarea id="bc-text" rows="3" maxlength="800" required placeholder="Example: pause all deploys until Monday; the payment provider is changing."></textarea></label>
+        <div class="actions"><button class="btn primary" type="submit" id="bc-send">Send to all leads</button></div>
+        <p class="hint" id="bc-status" hidden></p>
+      </form>
+    </details>
+  </section>
   <section class="block" id="add-block">
     <details id="add-details">
       <summary><h2>Add project</h2></summary>

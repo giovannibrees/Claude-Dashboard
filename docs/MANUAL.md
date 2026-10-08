@@ -94,6 +94,26 @@ Reversible decisions show a 4-hour clock. If you have not answered by then, the 
 with its own recommendation and posts a status saying so. Deleting, paying, publishing,
 production data and scope changes always wait for you.
 
+Cards are sorted by project priority first (P1, then P2, then P3), then high-priority items,
+then the ones waiting longest. Set a project's priority on its card in the side rail.
+
+### Message all leads
+
+The **Message all leads** button at the top sends one instruction to the lead of every project,
+for example "pause all deploys until Monday". Each lead picks it up on its next check (within
+about 30 minutes in the artifact version, right away in the local version) and passes it on to
+its own agents where it applies.
+
+### When an agent stops before reading your answer
+
+Agents stop when their work is delivered, even with a question still open. They do not keep
+running just to wait, which keeps costs down. If an answer is not picked up within 30 minutes and
+its agent has stopped, the lead takes it over: it acts on it, hands it to another agent, or flags
+which agent to restart. Answered cards in the feed say "Not picked up yet" until an agent reads them.
+
+Questions always come as their own card. A status update or delivery that contains a question
+is flagged on the card, and the local version refuses to post it.
+
 ### The rest of the page
 
 - **Agents**: a green dot means the agent was active in the last 30 minutes, gray means idle.

@@ -67,7 +67,7 @@ function buildState() {
   const projects = hub.listProjects().map((p) => {
     const tasks = hub.listTasks(p.name);
     const counts = Object.fromEntries(hub.TASK_STATUSES.map((s) => [s, tasks.filter((t) => t.status === s).length]));
-    return { name: p.name, goal: p.goal, phase: p.phase, scope: p.scope, never: p.never || [], lead: p.lead || '', counts, total: tasks.length,
+    return { name: p.name, goal: p.goal, phase: p.phase, priority: p.priority || 'P2', scope: p.scope, never: p.never || [], lead: p.lead || '', counts, total: tasks.length,
       tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.owner || '', pending_owner: t.pending_owner || '', epic: t.epic })) };
   });
   const allTasks = projects.flatMap((p) => p.tasks);
@@ -143,6 +143,29 @@ function connectProject(body) {
   } catch (e) { return [400, { error: e.message }]; }
 }
 
+function broadcast(body) {
+  const text = String(body.text || '').trim().slice(0, 800);
+  if (!text) return [400, { error: 'text required' }];
+  const leads = readDir(hub.DIRS.agents).filter((a) => a.agent && a.role === 'lead').map((a) => a.agent);
+  if (!leads.length) return [400, { error: 'There are no lead agents yet. Add a project with a lead first.' }];
+  const bid = hub.newId('bc');
+  for (const to of leads) {
+    const d = { id: hub.newId('dir'), timestamp: hub.nowIso(), from: 'ceo', to, text, broadcast: bid };
+    hub.writeJson(path.join(hub.DIRS.directives, hub.slug(to), `${d.id}.json`), d);
+  }
+  hub.log('broadcast', { id: bid, to: leads, text });
+  return [200, { ok: true, leads }];
+}
+
+function setPriority(body) {
+  const pr = hub.readProject(String(body.project || ''));
+  if (!pr) return [404, { error: 'project not found' }];
+  if (!['P1', 'P2', 'P3'].includes(body.priority)) return [400, { error: 'priority must be P1, P2 or P3' }];
+  hub.writeJson(path.join(hub.projectDir(pr.name), 'project.json'), { ...pr, priority: body.priority, updated_at: hub.nowIso() });
+  hub.log('project_priority', { project: pr.name, priority: body.priority });
+  return [200, { ok: true }];
+}
+
 function message(body) {
   const to = String(body.agent || '').trim();
   const text = String(body.text || '').trim().slice(0, 500);
@@ -181,12 +204,12 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   try {
     if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, buildState());
-    if (req.method === 'POST' && ['/api/action', '/api/message', '/api/connect'].includes(url.pathname)) {
+    if (req.method === 'POST' && ['/api/action', '/api/message', '/api/connect', '/api/broadcast', '/api/priority'].includes(url.pathname)) {
       // Same-origin only: browsers send Origin on POST; reject other sites posting to localhost.
       const origin = req.headers.origin;
       if (origin && new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'cross-origin' });
       const body = await readBody(req);
-      const handler = { '/api/action': act, '/api/message': message, '/api/connect': connectProject }[url.pathname];
+      const handler = { '/api/action': act, '/api/message': message, '/api/connect': connectProject, '/api/broadcast': broadcast, '/api/priority': setPriority }[url.pathname];
       const [code, out] = handler(body);
       return send(res, code, out);
     }

@@ -29,30 +29,35 @@ The CEO only writes `BRIEF.md` in the project folder. The lead agent turns it in
 
 1. Talk like you are reporting to a CEO: bullet points and key facts only.
    Max 5 bullets per item. No logs, no history of what changed yesterday, no long text.
-2. Never post a stream of questions. Batch related questions into ONE item with
+2. Questions go only in `question` or `approval` items, never inside a status or delivery.
+   The CEO answers from the Needs you list; a question hidden in an update gets missed.
+   `post-item` rejects a status or delivery that contains a question mark.
+3. Never post a stream of questions. Batch related questions into ONE item with
    numbered bullets, max 5 questions per item, and post it only when you cannot proceed.
    The hub rejects a 4th open question from the same agent.
-3. Every question and approval has a recommendation: the answer you would pick, one
+4. Every question and approval has a recommendation: the answer you would pick, one
    sentence. For batched questions give one `--rec` per numbered question. The CEO
    should be able to hit Approve.
-4. Screenshots are required for anything UI or design related. Color tables
+5. Screenshots are required for anything UI or design related. Color tables
    (`.csv` with `name,hex,usage`) for anything color related. The hub rejects items
    that mention UI or colors without them (use `--no-visual` only when the words
    appear but the item has nothing to do with visuals).
-5. Keep running. Do not stop for minor issues. Follow the plan, solve known problems
+6. Keep running. Do not stop for minor issues. Follow the plan, solve known problems
    yourself, post a question only when a human must decide. While waiting for an
    answer, continue every task that is not blocked.
-6. Four-hour rule. If a question stays unanswered for 4 hours AND the decision is
+7. Four-hour rule. If a question stays unanswered for 4 hours AND the decision is
    easily reversible, run `HUB/bin/auto-proceed <id>`: it records that you went with
    your recommendation and posts a status item saying so. If it is not reversible
    (deletions, payments, anything public-facing, anything touching production data),
    wait for the CEO. No exceptions. Mark these `--reversible no`; auto-proceed refuses them.
-7. When your delivery is done, post a delivery item and stop. Do not invent new work.
-8. Work only on tasks from the plan (section 4). New ideas, nice-to-haves and
+8. When your delivery is done, post a delivery item and stop. Do not invent new work.
+   You may stop with questions still open: never keep working only to wait for an answer.
+   The lead picks up answers you have not read.
+9. Work only on tasks from the plan (section 4). New ideas, nice-to-haves and
    unplanned features go to the ideas backlog (`--type idea`) and wait until the
    build is complete. Never build them on the side.
-9. Post a status item at least every 2 hours while working.
-10. Directives from the lead agent or the CEO (`DIRECTIVE from ...`) are binding.
+10. Post a status item at least every 2 hours while working.
+11. Directives from the lead agent or the CEO (`DIRECTIVE from ...`) are binding.
 
 ## 2. Item types
 
@@ -166,7 +171,7 @@ Three ways to receive answers. Use whichever fits; do not block while other work
    you try to stop. Act on them when they appear.
 2. `HUB/bin/my-inbox` prints new answers and directives and marks them read.
 3. `HUB/bin/wait-answer <id>` polls every 30 seconds and prints the answer.
-   Use `--timeout-hours 4` to get exit code 2 after 4 hours, then apply rule 6.
+   Use `--timeout-hours 4` to get exit code 2 after 4 hours, then apply rule 7.
    Run it in the background, or only when nothing else is unblocked.
 
 ## 6. Item schema (for reference)
