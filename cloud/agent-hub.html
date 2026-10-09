@@ -666,7 +666,9 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
   const name = slug(document.getElementById('f-name').value);
   const brief = document.getElementById('f-brief').value.trim();
   const repo = document.getElementById('f-repo').value.trim();
-  const agents = document.getElementById('f-agents').value.split(',').map((s) => slug(s)).filter(Boolean);
+  // Agent names are unique across projects: "lead" in project gym-app becomes "lead-gym-app".
+  const agents = document.getElementById('f-agents').value.split(',').map((s) => slug(s)).filter(Boolean)
+    .map((a) => (a.endsWith(`-${slug(document.getElementById('f-name').value)}`) ? a : `${a}-${slug(document.getElementById('f-name').value)}`));
   if (!name || !brief || !agents.length) { err.textContent = 'Give the project a name, at least one agent and a brief.'; err.hidden = false; return; }
   if (S.projects.some((p) => p.name === name)) { err.textContent = `A project called ${name} already exists. Pick another name.`; err.hidden = false; return; }
   const role = roleOf;
