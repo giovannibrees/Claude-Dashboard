@@ -100,6 +100,25 @@ production data and scope changes always wait for you.
 Cards are sorted by project priority first (P1, then P2, then P3), then high-priority items,
 then the ones waiting longest. Set a project's priority on its card in the side rail.
 
+### Last 24 hours
+
+The top of the page shows one line per project, most important first: tasks done, deliveries,
+work sent back by checks, stalled tasks, lead flags and how many items need you. It is worked
+out from the hub's own data, so it costs nothing.
+
+### Releases
+
+Each project card has **Release automatically when all checks pass** (on by default). When every
+task is done, all checks passed and the security sweep is clean, the lead releases and posts a
+"Released" update. You always get an approval card first for the first release to real users,
+database changes that delete or reshape data, and anything touching payments. Turn the switch
+off to approve every release yourself.
+
+### Lessons
+
+After each project the lead saves up to 5 one-line lessons and reads them when planning the next
+project, so the same mistakes are not repeated.
+
 ### Message all leads
 
 The **Message all leads** button at the top sends one instruction to the lead of every project,

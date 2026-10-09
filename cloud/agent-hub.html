@@ -174,6 +174,9 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--sunk); }
 .legend i.done { background: var(--ok); } .legend i.review { background: var(--ink); } .legend i.in-progress { background: var(--accent); }
 .project summary { color: var(--accent); font-size: 15px; }
+.digest { margin: 0; padding: 14px 18px 14px 34px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: 6px; }
+.digest b { font-weight: 600; }
+.auto { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .prio { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .prio select { min-width: 0; padding: 4px 8px; font-size: 14px; }
 .tasks { list-style: none; padding: 0; margin: 0; }
@@ -246,6 +249,10 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 
   <div class="board">
     <div class="maincol">
+      <section class="block" id="digest-block" hidden>
+        <h2>Last 24 hours</h2>
+        <ul class="digest" id="digest"></ul>
+      </section>
       <section class="block" id="needs-block">
         <h2>Needs you</h2>
         <div id="needs" class="cards"><p class="empty">Nothing needs you right now.</p></div>
@@ -392,6 +399,32 @@ function checksText(t) {
   return ' · ' + req.map((k) => `${k} ${c[k] ? (c[k].result === 'pass' ? 'passed' : 'failed') : 'pending'}`).join(', ');
 }
 
+// Short, computed summary of the last 24 hours per project, most important project first. No agent, no cost.
+function renderDigest() {
+  const since = Date.now() - 24 * 3600e3;
+  const lines = S.projects.slice().sort((a, b) => PRIO_RANK[a.priority || 'P2'] - PRIO_RANK[b.priority || 'P2'] || String(a.name).localeCompare(String(b.name))).map((p) => {
+    const tasks = S.tasks.filter((t) => t.project === p.name);
+    const its = S.items.filter((i) => i.project === p.name);
+    const done = tasks.filter((t) => t.status === 'done' && ms(t.updated_at || t.done_at) > since).length;
+    const delivered = its.filter((i) => i.type === 'delivery' && ms(i.timestamp) > since).length;
+    const needs = its.filter((i) => i.needs_me && i.status === 'open').length;
+    const failed = tasks.filter((t) => t.status === 'in-progress' && Object.values(t.checks || {}).some((c) => c && c.result === 'fail')).length;
+    const stalled = tasks.filter((t) => t.status === 'in-progress' && (S.agents.find((a) => a.agent === t.owner) || {}).last_seen && Date.now() - ms((S.agents.find((a) => a.agent === t.owner) || {}).last_seen) > 2 * 3600e3).length;
+    const flags = its.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info').length;
+    const parts = [];
+    if (done) parts.push(`${done} task${done === 1 ? '' : 's'} done`);
+    if (delivered) parts.push(`${delivered} delivered`);
+    if (failed) parts.push(`${failed} sent back by checks`);
+    if (stalled) parts.push(`${stalled} stalled`);
+    if (flags) parts.push(`${flags} lead flag${flags === 1 ? '' : 's'}`);
+    if (needs) parts.push(`<b>${needs} need${needs === 1 ? 's' : ''} you</b>`);
+    if (!parts.length) return null;
+    return `<li><b>${esc(p.name)}</b> (${esc(p.priority || 'P2')}): ${parts.join(', ')}</li>`;
+  }).filter(Boolean).slice(0, 6);
+  document.getElementById('digest-block').hidden = !lines.length;
+  document.getElementById('digest').innerHTML = lines.join('');
+}
+
 function renderProjects() {
   document.getElementById('projects-block').hidden = !S.projects.length;
   const order = ['done', 'review', 'in-progress', 'ready-for-dev', 'backlog'];
@@ -404,6 +437,7 @@ function renderProjects() {
     return `<div class="project">
       <div class="project-top"><h3>${esc(p.name)}</h3><span class="chip${p.phase === 'building' ? ' soft' : ''}">${esc(p.phase || 'planning')}</span></div>
       <label class="prio" for="prio-${esc(p.name)}">Priority <select id="prio-${esc(p.name)}" data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${(p.priority || 'P2') === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+      <label class="auto" for="auto-${esc(p.name)}"><input type="checkbox" id="auto-${esc(p.name)}" data-auto="${esc(p.name)}"${p.auto_release === false ? '' : ' checked'}> Release automatically when all checks pass</label>
       ${p.goal ? `<p>${esc(p.goal)}</p>` : ''}
       <div class="seg" role="img" aria-label="${n.done} of ${tasks.length} tasks done">${seg}</div>
       <div class="legend">${tasks.length ? order.filter((st) => n[st]).map((st) => `<span><i class="${st}"></i>${n[st]} ${label[st]}</span>`).join('') : `<span>${p.phase === 'planning' ? 'The lead is writing the plan' : 'No tasks yet'}</span>`}${ideas ? `<span>${ideas} idea${ideas === 1 ? '' : 's'} parked</span>` : ''}</div>
@@ -514,7 +548,7 @@ function render() {
   const focusId = a && a.id && (a.dataset.fbInput || a.dataset.msgInput) ? a.id : null;
   const caret = focusId ? a.selectionStart : null;
 
-  renderFilters(); renderAgents(); renderProjects();
+  renderFilters(); renderAgents(); renderProjects(); renderDigest();
   const items = S.items.filter(passes);
   const needs = items.filter((i) => i.needs_me && i.status === 'open').sort((x, y) =>
     (PRIO_RANK[projectPrio(x.project)] - PRIO_RANK[projectPrio(y.project)])
@@ -737,6 +771,10 @@ document.getElementById('f-team').addEventListener('change', (e) => { document.g
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset && t.dataset.auto && db) {
+    try { await db.doc(`projects/${t.dataset.auto}`).update({ auto_release: t.checked }); } catch (x) { t.checked = !t.checked; }
+    return;
+  }
   if (!t.dataset || !t.dataset.prio || !db) return;
   try { await db.doc(`projects/${t.dataset.prio}`).update({ priority: t.value }); } catch (x) { t.closest('.project').insertAdjacentHTML('beforeend', '<p class="error">Could not save the priority. Try again.</p>'); }
 });

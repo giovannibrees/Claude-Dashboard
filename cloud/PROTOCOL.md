@@ -151,7 +151,8 @@ Colors go inline in `colors`. Never put secrets in items.
 ## 7. Lead agent
 
 Phase planning (you are the lead and the project is in `planning`):
-1. Read the project's `brief`. Write `docs/PLAN.md` in the repo: goal, epics, out of scope.
+1. Read the project's `brief` and the `lessons` collection (past projects' lessons).
+   Write `docs/PLAN.md` in the repo: goal, epics, out of scope.
    Key facts missing? One batched question with recommendations; keep planning meanwhile.
 2. `update` the project with `goal`, `scope` (epic names), `never`.
 3. Split the work (rules in your role card and below) and `set` every task
@@ -198,4 +199,19 @@ Phase building, about every 30 minutes:
 - No progress on a task across 2 audits (same status, no new commits): find out why, then
   unblock it or escalate.
 - All tasks done: ask security (if in the team) for the whole-codebase sweep, run a final
-  review, set the project `phase: complete`, post the project delivery.
+  review, then release (below), set the project `phase: complete`, post the project delivery.
+
+Release (deploy or merge to the live version):
+- Ready means: every task `done` with all checks passed, the full test suite and build pass on
+  the merged code, and the security sweep found no critical or high issues.
+- The project's `auto_release` is true (the default) and none of the exceptions apply: release
+  yourself, then post a status item "Released <version>" with what changed (max 5 bullets).
+- Exceptions that always need an approval card first (`reversible: false`): the first release
+  to real users, database changes that delete or reshape existing data, anything touching
+  payments, or `auto_release` set to false by the CEO.
+- Release the same way mid-project when an epic is finished and these rules hold.
+
+Retrospective (after the project delivery, keep it short):
+- `set` `lessons/<project>` with `{project, at, bullets: [max 5]}`: what to repeat and what to
+  avoid next time, one line each, concrete ("split payments into its own task early").
+- When planning a new project, `list` `lessons` first and apply the ones that fit.
