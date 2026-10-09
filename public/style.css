@@ -132,3 +132,6 @@ textarea { resize: vertical; line-height: 1.5; }
 .steps li { margin: 0 0 14px; }
 .cmd { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font: 400 14px var(--mono); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 10px; }
+
+.digest { margin: 0; padding: 14px 18px 14px 34px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.digest li { margin: 4px 0; }

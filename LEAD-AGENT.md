@@ -16,6 +16,9 @@ progress; `task done` refuses a task whose required checks have not all passed.
 
 ## Phase planning
 
+Before planning: read every `HUB/projects/*/lessons.md` from earlier projects and apply what fits.
+
+
 While the project is in planning, do protocol section 0 (turn BRIEF.md into the plan, tasks and
 one plan approval). Start the supervision loop below once the CEO approves and the phase is building.
 
@@ -90,11 +93,25 @@ Only when a human must decide: a scope change, a conflict between agents you can
 resolve from the plan, an irreversible action, or a task that failed review 5 times.
 One batched question with numbered points and a recommendation per point.
 
+## Release
+
+Release (deploy or merge to the live version) when every task is done with all checks passed,
+the full test suite and build pass on the merged code, and the security sweep found no critical
+or high issues. Also mid-project, when an epic is finished and these rules hold.
+- `auto_release` in `HUB/projects/<project>/project.json` is true (the default) and no exception
+  applies: release yourself, then post a status item "Released <version>" (max 5 bullets).
+- Always an approval card first (`--reversible no`): the first release to real users, database
+  changes that delete or reshape existing data, anything touching payments, or `auto_release`
+  turned off by the CEO.
+
 ## End of build
 
 When `audit` reports "all tasks done":
 1. Run a final review over the whole project (tests, build, acceptance criteria per task).
-2. `HUB/bin/project phase <project> complete`.
+2. Release (above), then `HUB/bin/project phase <project> complete`.
 3. Post one delivery item summarizing the build, with links and evidence.
+4. Retrospective: write `HUB/projects/<project>/lessons.md` with max 5 one-line bullets, what to
+   repeat and what to avoid ("split payments into its own task early").
+   When planning a new project, read every `HUB/projects/*/lessons.md` first.
 4. The ideas backlog on the dashboard now says the build is complete; the CEO decides
    which ideas become the next plan.

@@ -119,6 +119,31 @@ function renderAgents() {
   }).join('');
 }
 
+// Short summary of the last 24 hours per project, most important first. Computed here, no agent.
+function renderDigest() {
+  const rank = { P1: 0, P2: 1, P3: 2 };
+  const since = Date.now() - 24 * 3600e3;
+  const lines = state.projects.slice().sort((a, b) => rank[a.priority] - rank[b.priority] || a.name.localeCompare(b.name)).map((p) => {
+    const its = state.items.filter((i) => i.project === p.name);
+    const done = p.tasks.filter((t) => t.status === 'done' && Date.parse(t.updated_at || 0) > since).length;
+    const delivered = its.filter((i) => i.type === 'delivery' && Date.parse(i.timestamp) > since).length;
+    const needs = its.filter((i) => i.needs_me && i.status === 'open').length;
+    const failed = p.tasks.filter((t) => t.status === 'in-progress' && Object.values(t.checks || {}).some((c) => c && c.result === 'fail')).length;
+    const stalled = p.tasks.filter((t) => t.status === 'in-progress' && state.agents.some((a) => a.agent === t.owner && a.state !== 'running')).length;
+    const flags = its.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info').length;
+    const parts = [];
+    if (done) parts.push(`${done} task${done === 1 ? '' : 's'} done`);
+    if (delivered) parts.push(`${delivered} delivered`);
+    if (failed) parts.push(`${failed} sent back by checks`);
+    if (stalled) parts.push(`${stalled} stalled`);
+    if (flags) parts.push(`${flags} lead flag${flags === 1 ? '' : 's'}`);
+    if (needs) parts.push(`<strong>${needs} need${needs === 1 ? 's' : ''} you</strong>`);
+    return parts.length ? `<li><strong>${esc(p.name)}</strong> (${esc(p.priority)}): ${parts.join(', ')}</li>` : null;
+  }).filter(Boolean).slice(0, 6);
+  document.getElementById('digest-block').hidden = !lines.length;
+  document.getElementById('digest').innerHTML = lines.join('');
+}
+
 function renderProjects() {
   const el = document.getElementById('projects');
   document.getElementById('projects-block').hidden = !state.projects.length;
@@ -129,7 +154,8 @@ function renderProjects() {
     const summary = ['in-progress', 'review', 'ready-for-dev', 'backlog'].filter((s) => p.counts[s]).map((s) => `${p.counts[s]} ${s}`).join(' · ');
     return `<div class="project">
       <div class="project-top"><h3>${esc(p.name)}</h3><span class="count">${esc(p.phase)} · ${p.counts.done}/${p.total} tasks done</span></div>
-      <p><label>Priority <select data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${p.priority === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label></p>
+      <p><label>Priority <select data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${p.priority === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+        · <label><input type="checkbox" data-auto="${esc(p.name)}"${p.auto_release ? ' checked' : ''}> Release automatically when all checks pass</label></p>
       <p>${esc(p.goal || '')}</p>
       <div class="bar" role="img" aria-label="${pct}% done"><span style="width:${pct}%"></span></div>
       <p>${summary || 'No open tasks'}${ideas ? ` · ${ideas} idea${ideas === 1 ? '' : 's'} parked` : ''}${p.lead ? ` · lead: ${esc(p.lead)}` : ''}</p>
@@ -297,6 +323,7 @@ function render() {
   document.getElementById('needs-summary').innerHTML = allNeeds ? `<strong>${allNeeds} need${allNeeds === 1 ? 's' : ''} you</strong>` : 'Nothing needs you';
   document.title = allNeeds ? `(${allNeeds}) Agent Hub` : 'Agent Hub';
 
+  renderDigest();
   section('needs', needs, 'Nothing needs you right now.');
   document.getElementById('deliveries-count').textContent = deliveries.length ? `${deliveries.length} to review` : '';
   document.getElementById('deliveries-block').hidden = !deliveries.length;
@@ -394,6 +421,10 @@ document.getElementById('bc-form').addEventListener('submit', async (e) => {
 
 document.addEventListener('change', async (e) => {
   const t = e.target;
+  if (t.dataset && t.dataset.auto) {
+    try { await post('/api/priority', { project: t.dataset.auto, auto_release: t.checked }); } catch (x) { t.checked = !t.checked; alert(`Could not save: ${x.message}`); }
+    return;
+  }
   if (!t.dataset || !t.dataset.prio) return;
   try { await post('/api/priority', { project: t.dataset.prio, priority: t.value }); load(); } catch (x) { alert(`Could not save: ${x.message}`); }
 });

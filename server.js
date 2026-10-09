@@ -67,8 +67,8 @@ function buildState() {
   const projects = hub.listProjects().map((p) => {
     const tasks = hub.listTasks(p.name);
     const counts = Object.fromEntries(hub.TASK_STATUSES.map((s) => [s, tasks.filter((t) => t.status === s).length]));
-    return { name: p.name, goal: p.goal, phase: p.phase, priority: p.priority || 'P2', scope: p.scope, never: p.never || [], lead: p.lead || '', counts, total: tasks.length,
-      tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.owner || '', pending_owner: t.pending_owner || '', epic: t.epic })) };
+    return { name: p.name, goal: p.goal, phase: p.phase, priority: p.priority || 'P2', auto_release: p.auto_release !== false, scope: p.scope, never: p.never || [], lead: p.lead || '', counts, total: tasks.length,
+      tasks: tasks.map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.owner || '', pending_owner: t.pending_owner || '', epic: t.epic, updated_at: t.updated_at || '', checks: t.checks || {} })) };
   });
   const allTasks = projects.flatMap((p) => p.tasks);
   const agents = readDir(hub.DIRS.agents).filter((a) => a.agent).map((a) => agentState(a, inbox, allTasks))
@@ -160,9 +160,14 @@ function broadcast(body) {
 function setPriority(body) {
   const pr = hub.readProject(String(body.project || ''));
   if (!pr) return [404, { error: 'project not found' }];
-  if (!['P1', 'P2', 'P3'].includes(body.priority)) return [400, { error: 'priority must be P1, P2 or P3' }];
-  hub.writeJson(path.join(hub.projectDir(pr.name), 'project.json'), { ...pr, priority: body.priority, updated_at: hub.nowIso() });
-  hub.log('project_priority', { project: pr.name, priority: body.priority });
+  const patch = {};
+  if (body.priority !== undefined) {
+    if (!['P1', 'P2', 'P3'].includes(body.priority)) return [400, { error: 'priority must be P1, P2 or P3' }];
+    patch.priority = body.priority;
+  }
+  if (body.auto_release !== undefined) patch.auto_release = body.auto_release === true;
+  hub.writeJson(path.join(hub.projectDir(pr.name), 'project.json'), { ...pr, ...patch, updated_at: hub.nowIso() });
+  hub.log('project_settings', { project: pr.name, ...patch });
   return [200, { ok: true }];
 }
 
