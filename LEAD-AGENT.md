@@ -93,6 +93,12 @@ Only when a human must decide: a scope change, a conflict between agents you can
 resolve from the plan, an irreversible action, or a task that failed review 5 times.
 One batched question with numbered points and a recommendation per point.
 
+## User tests and code audits
+
+Follow sections 8 and 9 of `HUB/cloud/PROTOCOL.md` (they apply to both versions). In the local
+version, customer profiles live in `HUB/projects/<project>/personas.json` (a list of
+`{name, age, it_skill, device, goals, needs}`); the CEO asks for a user test or audit with a message.
+
 ## Release
 
 Release (deploy or merge to the live version) when every task is done with all checks passed,

@@ -114,6 +114,14 @@ task is done, all checks passed and the security sweep is clean, the lead releas
 database changes that delete or reshape data, and anything touching payments. Turn the switch
 off to approve every release yourself.
 
+### Customer profiles, user tests and code audits
+
+Each project card has **Customer profiles**: add the kinds of people who will use the app (age,
+IT skill, device, goals, needs) and click **Run user test**. A usertest agent uses the app as that
+person and reports bugs and confusing spots. **Run code audit** has security, cleanup and code
+review agents go through the whole codebase; you get one approval card with the fixes.
+Details in the [team guide](TEAMS.md).
+
 ### Lessons
 
 After each project the lead saves up to 5 one-line lessons and reads them when planning the next

@@ -10,7 +10,7 @@ your start line. Every call passes `url: HUB`. Take every timestamp from the sys
 
 Read your role card before anything else: `get` collection `config`, doc_id `roles`, field
 `text`, section `## <your role>`. It says what you do, what you never do and when you pass or
-block work. Roles: lead, architect, designer, builder, reviewer, security, qa, docs.
+block work. Roles: lead, architect, designer, builder, reviewer, security, qa, usertest, cleanup, docs.
 
 ## 1. Hard rules
 
@@ -215,3 +215,38 @@ Retrospective (after the project delivery, keep it short):
 - `set` `lessons/<project>` with `{project, at, bullets: [max 5]}`: what to repeat and what to
   avoid next time, one line each, concrete ("split payments into its own task early").
 - When planning a new project, `list` `lessons` first and apply the ones that fit.
+
+## 8. Customer profiles and user tests
+
+- `personas/<project>--<slug>`: `{project, name, age, it_skill, device, goals, needs, created_at}`.
+  `it_skill` is none, basic, average, advanced or expert; `device` is phone, tablet or desktop.
+- A user test starts from a directive (the CEO's "Run user test" button sends one to the
+  project's usertest agent, or to the lead when there is none). The directive names the profile
+  or says "all profiles".
+- The usertest agent follows its role card: runs the app as that person, writes
+  `docs/user-tests/<date>-<profile>.md` on its branch, posts one status item per run (max 5
+  bullets, screenshots attached), and sends the lead a directive listing its `bug` and `blocker`
+  findings with file or screen, steps and screenshot.
+- The lead turns each confirmed bug or blocker into a fix task (it fixes planned behavior, so no
+  scope change is needed) with checks `code` and `qa`. `confusing` findings that need a design
+  change and every `idea` go to the ideas backlog as `idea` items, never straight into the build.
+- After the fixes, the usertest agent runs the same profile again and confirms in its next report.
+
+## 9. Code audit
+
+- Starts from a directive (the CEO's "Run code audit" button sends it to the lead), and is also
+  worth running once before the project delivery.
+- The lead asks, at the same time and independently: security (whole-codebase sweep), cleanup
+  (code fluff) and reviewer (bugs, performance, readability). Missing roles: the lead does that
+  pass itself, one pass at a time, starting fresh from the code each time.
+- Each auditor writes its findings to `docs/audits/<date>-<role>.md` on its branch (file, lines,
+  what is wrong, severity, suggested fix) and sends the lead a directive with the file path and
+  its counts per severity.
+- The lead checks every critical and high finding against the code, drops duplicates and
+  findings it cannot confirm, and posts ONE approval to the CEO: title "Code audit: <n> fixes",
+  max 5 bullets (the most important fixes and lines of code saved), recommendation "Approve the
+  fixes", `reversible: true`. Critical security findings are never parked: they become tasks at
+  once and are reported in the same card.
+- Approved: the fixes become tasks with the usual checks. Medium and low findings that were not
+  approved go to the ideas backlog in one `idea` item per area.
+

@@ -176,6 +176,14 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .project summary { color: var(--accent); font-size: 15px; }
 .digest { margin: 0; padding: 14px 18px 14px 34px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: 6px; }
 .digest b { font-weight: 600; }
+.pf { display: grid; grid-template-columns: 1fr 72px; gap: 8px; }
+.pf input[type=text] { min-width: 0; }
+.pf > input:nth-of-type(n+3), .pf > button, .pf > label { grid-column: 1 / -1; }
+.plist { list-style: none; padding: 0; margin: 0; }
+.plist li { padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 2px; font-size: 15px; }
+.plist .link { padding: 0; font-size: 14px; }
+.pf label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.pf label select { flex: 1; min-width: 0; padding: 5px 8px; }
 .auto { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .prio { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
 .prio select { min-width: 0; padding: 4px 8px; font-size: 14px; }
@@ -236,6 +244,7 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
         <option value="lead, builder, reviewer, security" selected>Standard: lead, builder, reviewer, security</option>
         <option value="lead, designer, builder, builder-2, reviewer, qa">Product: lead, designer, 2 builders, reviewer, qa</option>
         <option value="lead, architect, builder, builder-2, reviewer, security, qa">Secure: lead, architect, 2 builders, reviewer, security, qa</option>
+        <option value="lead, builder, reviewer, security, cleanup, usertest">Review: lead, builder, reviewer, security, cleanup, usertest</option>
       </select></label>
       <label for="f-agents">Agents (edit to customize) <input type="text" id="f-agents" value="lead, builder, reviewer, security" placeholder="lead, builder, reviewer, security"></label>
       <label for="f-priority">Priority <select id="f-priority"><option value="P1">P1, most important</option><option value="P2" selected>P2, normal</option><option value="P3">P3, when there is time</option></select></label>
@@ -315,7 +324,9 @@ const MEANING = {
 };
 
 let db = null;
-const S = { items: [], agents: [], projects: [], tasks: [], unread: [] };
+const S = { items: [], agents: [], projects: [], tasks: [], unread: [], personas: [] };
+const openDetails = new Set(); // details sections the viewer opened, kept open across re-renders
+const pfDrafts = {};            // customer profile form drafts per project
 const drafts = {};
 const msgDrafts = {};
 let filters = { agent: '', project: '', type: '' };
@@ -392,6 +403,47 @@ function renderAgents() {
   }).join('');
 }
 
+const SKILLS = ['none', 'basic', 'average', 'advanced', 'expert'];
+const DEVICES = ['phone', 'tablet', 'desktop'];
+
+function profilesHtml(p) {
+  const list = S.personas.filter((x) => x.project === p.name).sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const d = pfDrafts[p.name] || {};
+  const id = (f) => `pf-${p.name}-${f}`;
+  const sel = (f, opts, cur) => `<select id="${esc(id(f))}" data-pf="${esc(p.name)}" data-field="${f}">${opts.map((o) => `<option${o === cur ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
+  return `<details id="pers-${esc(p.name)}" data-keep${openDetails.has(`pers-${p.name}`) ? ' open' : ''}><summary>Customer profiles (${list.length})</summary>
+    <div class="cards">
+      ${list.length ? `<ul class="plist">${list.map((x) => `<li><span>${esc(x.name)}, ${esc(x.age)}, IT ${esc(x.it_skill)}, ${esc(x.device)}${x.needs ? ` · ${esc(x.needs)}` : ''}</span>
+        <span><button type="button" class="link" data-run-test="${esc(p.name)}" data-persona="${esc(x.name)}">Run user test</button> · <button type="button" class="link" data-del-persona="${esc(x.id)}">Remove</button></span></li>`).join('')}</ul>
+        <div><button type="button" class="btn" data-run-test="${esc(p.name)}" data-persona="">Test with all profiles</button></div>` : '<p class="hint">Add the kinds of customers who will use this app. A usertest agent then uses the app as each of them and reports bugs and confusing spots.</p>'}
+      <div class="pf">
+        <input type="text" id="${esc(id('name'))}" data-pf="${esc(p.name)}" data-field="name" placeholder="Name, e.g. Maria" value="${esc(d.name || '')}" maxlength="40">
+        <input type="text" id="${esc(id('age'))}" data-pf="${esc(p.name)}" data-field="age" placeholder="Age" value="${esc(d.age || '')}" maxlength="3" inputmode="numeric">
+        <label>IT skill ${sel('it_skill', SKILLS, d.it_skill || 'average')}</label>
+        <label>Device ${sel('device', DEVICES, d.device || 'phone')}</label>
+        <input type="text" id="${esc(id('goals'))}" data-pf="${esc(p.name)}" data-field="goals" placeholder="Goals, e.g. book a yoga class for Tuesday" value="${esc(d.goals || '')}" maxlength="200">
+        <input type="text" id="${esc(id('needs'))}" data-pf="${esc(p.name)}" data-field="needs" placeholder="Needs, e.g. poor eyesight, impatient, Spanish" value="${esc(d.needs || '')}" maxlength="200">
+        <button type="button" class="btn" data-add-persona="${esc(p.name)}">Add profile</button>
+      </div>
+    </div>
+  </details>`;
+}
+
+function projectMsg(project, text) {
+  const el = document.getElementById(`pmsg-${project}`);
+  if (el) { el.textContent = text; el.hidden = false; }
+}
+
+// Sends a directive to the project's agent with the given role, falling back to the lead.
+async function directProject(project, role, text) {
+  const pr = S.projects.find((x) => x.name === project) || {};
+  const agents = S.agents.filter((a) => a.project === project);
+  const target = (agents.find((a) => a.role === role) || {}).agent || pr.lead || (agents.find((a) => a.role === 'lead') || {}).agent;
+  if (!target) throw new Error('This project has no lead agent yet.');
+  await db.collection('directives').add({ to: target, project, from: 'ceo', text, timestamp: new Date().toISOString(), read: false });
+  return target;
+}
+
 function checksText(t) {
   const req = arr(t.checks_required);
   if (!req.length || t.status === 'backlog' || t.status === 'ready-for-dev') return '';
@@ -441,13 +493,16 @@ function renderProjects() {
       ${p.goal ? `<p>${esc(p.goal)}</p>` : ''}
       <div class="seg" role="img" aria-label="${n.done} of ${tasks.length} tasks done">${seg}</div>
       <div class="legend">${tasks.length ? order.filter((st) => n[st]).map((st) => `<span><i class="${st}"></i>${n[st]} ${label[st]}</span>`).join('') : `<span>${p.phase === 'planning' ? 'The lead is writing the plan' : 'No tasks yet'}</span>`}${ideas ? `<span>${ideas} idea${ideas === 1 ? '' : 's'} parked</span>` : ''}</div>
-      <details><summary>Plan and tasks</summary>
+      <details id="plan-${esc(p.name)}" data-keep${openDetails.has(`plan-${p.name}`) ? ' open' : ''}><summary>Plan and tasks</summary>
         <div class="cards">
           <p><strong>In scope:</strong> ${arr(p.scope).map(esc).join('; ') || 'not set yet'}</p>
           ${arr(p.never).length ? `<p><strong>Never:</strong> ${arr(p.never).map(esc).join('; ')}</p>` : ''}
           <ul class="tasks">${tasks.map((t) => `<li><span class="tid">${esc(t.id)}</span><span>${esc(t.title)}</span><span class="tstatus ${esc(t.status)}">${esc(label[t.status] || t.status)}${t.owner ? ` · ${esc(t.owner)}` : ''}${t.pending_owner ? ` → ${esc(t.pending_owner)}` : ''}${checksText(t)}</span></li>`).join('')}</ul>
         </div>
       </details>
+      ${profilesHtml(p)}
+      <div class="row"><button type="button" class="btn" data-run-audit="${esc(p.name)}">Run code audit</button></div>
+      <p class="hint" id="pmsg-${esc(p.name)}" hidden></p>
     </div>`;
   }).join('');
 }
@@ -545,7 +600,7 @@ function section(id, list, empty, opts) {
 
 function render() {
   const a = document.activeElement;
-  const focusId = a && a.id && (a.dataset.fbInput || a.dataset.msgInput) ? a.id : null;
+  const focusId = a && a.id && (a.dataset.fbInput || a.dataset.msgInput || a.dataset.pf) && a.tagName === 'INPUT' ? a.id : null;
   const caret = focusId ? a.selectionStart : null;
 
   renderFilters(); renderAgents(); renderProjects(); renderDigest();
@@ -650,7 +705,7 @@ async function sendMessage(agent, btn) {
 }
 
 function roleOf(a) {
-  for (const [prefix, r] of [['lead', 'lead'], ['architect', 'architect'], ['design', 'designer'], ['review', 'reviewer'], ['security', 'security'], ['sec', 'security'], ['qa', 'qa'], ['test', 'qa'], ['docs', 'docs']]) if (a.startsWith(prefix)) return r;
+  for (const [prefix, r] of [['lead', 'lead'], ['architect', 'architect'], ['design', 'designer'], ['review', 'reviewer'], ['security', 'security'], ['sec', 'security'], ['qa', 'qa'], ['usertest', 'usertest'], ['user', 'usertest'], ['persona', 'usertest'], ['test', 'qa'], ['cleanup', 'cleanup'], ['clean', 'cleanup'], ['docs', 'docs']]) if (a.startsWith(prefix)) return r;
   return 'builder';
 }
 
@@ -726,6 +781,44 @@ document.addEventListener('click', async (e) => {
   if (t.id === 'add-toggle') { document.getElementById('bc-panel').hidden = true; }
   if (t.id === 'add-toggle') { const p = document.getElementById('add-panel'); p.hidden = !p.hidden; if (!p.hidden) document.getElementById('f-name').focus(); return; }
   if (t.id === 'add-cancel') { document.getElementById('add-panel').hidden = true; return; }
+  if (t.dataset.addPersona && db) {
+    const project = t.dataset.addPersona;
+    const d = pfDrafts[project] || {};
+    const name = String(d.name || '').trim();
+    const age = parseInt(d.age, 10);
+    if (!name || !(age > 0 && age < 120)) { projectMsg(project, 'Give the profile a name and an age.'); return; }
+    t.disabled = true;
+    delete pfDrafts[project];
+    try {
+      await db.doc(`personas/${project}--${slug(name)}`).set({ project, name, age, it_skill: d.it_skill || 'average', device: d.device || 'phone',
+        goals: String(d.goals || '').trim(), needs: String(d.needs || '').trim(), created_at: new Date().toISOString() });
+      render();
+      projectMsg(project, `Added ${name}.`);
+    } catch (x) { pfDrafts[project] = d; render(); projectMsg(project, 'Could not save the profile. Try again.'); }
+    return;
+  }
+  if (t.dataset.delPersona && db) { try { await db.doc(`personas/${t.dataset.delPersona}`).delete(); } catch (x) { /* stays listed */ } return; }
+  if (t.dataset.runTest && db) {
+    const project = t.dataset.runTest;
+    const who = t.dataset.persona;
+    t.disabled = true;
+    try {
+      const to = await directProject(project, 'usertest', `Run a user test ${who ? `as the customer profile "${who}"` : 'with every customer profile'} (protocol section 8). Report per profile.`);
+      projectMsg(project, `User test requested from ${to}.`);
+    } catch (x) { projectMsg(project, x.message || 'Could not send. Try again.'); }
+    t.disabled = false;
+    return;
+  }
+  if (t.dataset.runAudit && db) {
+    const project = t.dataset.runAudit;
+    t.disabled = true;
+    try {
+      const to = await directProject(project, 'lead', 'Run a code audit (protocol section 9): security, cleanup and reviewer passes over the whole codebase, then one approval card with the fixes.');
+      projectMsg(project, `Code audit requested from ${to}.`);
+    } catch (x) { projectMsg(project, x.message || 'Could not send. Try again.'); }
+    t.disabled = false;
+    return;
+  }
   if (t.id === 'flt-clear') { filters = { agent: '', project: '', type: '' }; saveFilters(); render(); return; }
   if (t.id === 'add-another') { document.getElementById('add-result').hidden = true; const f = document.getElementById('add-form'); f.reset(); f.hidden = false; return; }
   if (t.id === 'prune' && db) {
@@ -735,8 +828,19 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+document.addEventListener('toggle', (e) => {
+  const d = e.target;
+  if (!d.matches || !d.matches('details[data-keep]')) return;
+  if (d.open) openDetails.add(d.id); else openDetails.delete(d.id);
+}, true);
+document.addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset && t.dataset.pf && t.tagName === 'SELECT') (pfDrafts[t.dataset.pf] = pfDrafts[t.dataset.pf] || {})[t.dataset.field] = t.value;
+});
+
 document.addEventListener('input', (e) => {
   const t = e.target;
+  if (t.dataset.pf) { (pfDrafts[t.dataset.pf] = pfDrafts[t.dataset.pf] || {})[t.dataset.field] = t.value; }
   if (t.dataset.fbInput) drafts[t.dataset.fbInput] = t.value;
   if (t.dataset.msgInput) msgDrafts[t.dataset.msgInput] = t.value;
 });
@@ -809,6 +913,7 @@ function subscribe(path, key, query) {
   subscribe('projects', 'projects', (c) => c.limit(100));
   subscribe('tasks', 'tasks', (c) => c.limit(1000));
   subscribe('answers', 'unread', (c) => c.where('read', '==', false).limit(500));
+  subscribe('personas', 'personas', (c) => c.limit(500));
   setInterval(render, 60000); // keeps "time ago", idle dots and 4-hour clocks current
 })();
 </script>

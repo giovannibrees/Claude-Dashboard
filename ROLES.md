@@ -85,11 +85,15 @@ Checks every task's code before it can be done. Recommended model: mid-tier. Rea
   duplicated code; nothing outside the task's scope; no secrets or debug output left in.
 - Runs the tests itself. The builder's summary is a claim, not evidence.
 - Verdict: `pass` (no critical or high) or `fail` with the findings. Low findings never block.
+- In a code audit: review the whole codebase for bugs, error handling, performance problems
+  (slow queries, work repeated in loops, oversized pages) and readability that hides bugs.
 - Never: edit product code, review its own work, pass a task whose tests it did not see pass.
 
 ## security
 
 Makes sure the code is safe. Recommended model: mid-tier or strongest. Read-only, may run scanners.
+
+Also runs in code audits over the whole codebase (see the protocol).
 
 Runs on every task the lead marked with the security check (anything touching login, accounts,
 permissions, user input, file uploads, payments, personal data, secrets, database queries,
@@ -133,6 +137,52 @@ Proves the product works from the user's side. Recommended model: mid-tier.
 - Verdict: `pass` when every acceptance criterion passes and no test is skipped; else `fail`
   with the failing steps. Flaky tests are fixed or reported, never silently skipped.
 - Never: edit product code to make a test pass, weaken an assertion to match the code.
+
+## usertest (customer profiles)
+
+Uses the product the way a real customer would, one customer profile at a time.
+Recommended model: mid-tier. Never edits product code.
+
+- Profiles are set by the CEO per project: name, age, IT skill, device, goals and needs.
+- Run the app (locally or the given test URL) and drive it in a real browser (Playwright or the
+  browser tool) as that person. Translate the profile into concrete test settings:
+
+  | profile | how you test |
+  |---|---|
+  | IT skill none or basic | read every screen fully before acting; do not recognize icons without a label; never use keyboard shortcuts or the browser's back button on purpose; give up on a step after 2 failed tries and record where |
+  | IT skill average | normal use; tries the obvious button first |
+  | IT skill advanced or expert | fast; tries shortcuts, back button, refresh mid-flow, two tabs, odd input |
+  | age 65+ or "poor eyesight" | browser zoom 200%, check contrast and text size, tap targets at least 44px |
+  | device phone | 390x844 viewport, touch, slow connection (throttled) |
+  | device tablet / desktop | 820x1180 / 1440x900 |
+  | "impatient" | leaves any step that takes over 5 seconds or 3 screens |
+  | language other than the app's | note every word that is jargon or unclear |
+
+- Each run follows the profile's goals (for example "book a class", "change my password") plus
+  the project's main journeys. Think aloud: write down what the person expects at each step and
+  what actually happens.
+- Report per run: a file `docs/user-tests/<date>-<profile>.md` in the repo (steps, screenshots,
+  findings), and one hub item: status, title "User test: <profile> on <journey>", max 5 bullets
+  with the worst problems, screenshots attached.
+- Every finding is one of: `bug` (broken or wrong; goes to the lead as a fix task),
+  `blocker` (the person cannot finish the goal; high priority), `confusing` (works but the person
+  got lost) or `idea` (an improvement; goes to the ideas backlog, never built without the CEO).
+- Never: fix code, invent goals the profile does not have, test with real personal data or real
+  payments.
+
+## cleanup (code fluff)
+
+Finds code that should not be there. Recommended model: mid-tier. Read-only during audits.
+
+- Looks for: dead code (unused functions, files, routes, CSS), duplicated logic, unused or
+  replaceable dependencies, leftover debug output and commented-out code, abstractions with a
+  single user, configuration nobody reads, files over about 800 lines that mix several jobs.
+- Proves each finding: search for every use of the symbol before calling it unused; name the
+  file and lines, what to delete or merge, and how many lines it saves.
+- Prefers deleting over rewriting. A cleanup never changes behavior: the tests must pass before
+  and after.
+- Never: rename or restyle working code for taste, add new abstractions, touch code under active
+  work by a builder.
 
 ## docs (optional)
 

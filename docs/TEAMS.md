@@ -12,9 +12,11 @@ task gets checked before it counts as done. The role cards the agents follow are
 | Standard | lead, builder, reviewer, security | Most apps. |
 | Product | lead, designer, builder, builder-2, reviewer, qa | Apps with many screens. |
 | Secure | lead, architect, builder, builder-2, reviewer, security, qa | Payments, personal data, anything going to real users or production. |
+| Review | lead, builder, reviewer, security, cleanup, usertest | An existing app you want checked and cleaned up: code audit plus user tests. |
 
 The **Add project** form has these presets. You can also type your own list; the agent name sets
-the role: names starting with `lead`, `architect`, `design`, `review`, `security`, `qa` or `docs`
+the role: names starting with `lead`, `architect`, `design`, `review`, `security`, `qa`, `usertest`,
+`cleanup` or `docs`
 get that role, everything else is a builder (`builder`, `builder-2`, `api`, `frontend`).
 
 Rules of thumb:
@@ -60,6 +62,26 @@ The order is fixed:
 A failed check sends the task back to the same builder with the findings. After 5 rounds on one
 task, the lead asks you what to do. Before the project is delivered, security does one sweep over
 the whole codebase.
+
+## User tests with customer profiles
+
+On a project card, open **Customer profiles** and add the kinds of people who will use the app:
+name, age, IT skill (none to expert), device (phone, tablet, desktop), goals and needs
+("poor eyesight", "impatient", "Spanish"). **Run user test** (one profile) or **Test with all
+profiles** sends the job to the project's `usertest` agent (or the lead if there is none).
+
+The agent opens the app in a real browser and uses it as that person: a beginner reads every
+screen and gives up after 2 failed tries, poor eyesight means 200% zoom, a phone means a phone-sized
+screen. It reports bugs, blockers and confusing spots with screenshots. Bugs become fix tasks;
+ideas go to the ideas backlog. After the fixes it runs the same profile again.
+
+## Code audit
+
+**Run code audit** on a project card asks the lead for a review of the whole codebase by three
+separate reviewers: security, cleanup (dead code, duplicates, unused packages, over-engineering)
+and the code reviewer (bugs, performance, readability). The lead checks every finding, drops
+duplicates and sends you one approval card with the fixes. Nothing changes until you approve,
+except critical security problems, which are fixed at once.
 
 ## Keeping cost down
 
