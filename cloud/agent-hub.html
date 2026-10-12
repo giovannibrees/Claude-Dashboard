@@ -231,6 +231,7 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 
 <main class="wrap">
   <p class="banner" id="offline" hidden>This page needs its database to work. Open it from claude.ai while signed in.</p>
+  <p class="banner" id="perm" hidden>Your answers cannot be saved: this page is not allowed to save to its database. <button type="button" class="btn" id="perm-fix">Allow saving</button></p>
 
   <nav class="strip" aria-label="Summary">
     <button type="button" class="tile" data-jump="needs-block" id="tile-needs"><b id="needs-count">0</b><span>Need you</span></button>
@@ -596,11 +597,14 @@ function cardHtml(it, opts) {
       const left = until(it.auto_proceed_at || new Date(ms(it.timestamp) + 4 * 3600e3).toISOString());
       parts.push(`<p class="timer">${left ? `Agent proceeds with its recommendation in ${left} if you do not answer.` : 'Past 4 hours: the agent may proceed with its recommendation.'}</p>`);
     } else parts.push('<p class="timer">Not reversible: the agent waits for you.</p>');
+    const off = saving[it.id] ? ' disabled' : '';
     parts.push(`<div class="actions">
-      <button class="btn primary" data-act="approve" data-id="${esc(it.id)}">Approve</button>
-      <button class="btn" data-fb-open="${esc(it.id)}">Feedback</button>
-      <button class="btn" data-act="more_info" data-id="${esc(it.id)}">More info</button>
-      <button class="btn" data-act="reject" data-id="${esc(it.id)}">Not approved</button></div>`);
+      <button class="btn primary" data-act="approve" data-id="${esc(it.id)}"${off}>Approve</button>
+      <button class="btn" data-fb-open="${esc(it.id)}"${off}>Feedback</button>
+      <button class="btn" data-act="more_info" data-id="${esc(it.id)}"${off}>More info</button>
+      <button class="btn" data-act="reject" data-id="${esc(it.id)}"${off}>Not approved</button></div>`);
+    if (saving[it.id]) parts.push('<p class="hint" role="status">Saving your answer...</p>');
+    if (saveErr[it.id]) parts.push(`<p class="error" role="alert">${esc(saveErr[it.id])}</p>`);
     if (Object.prototype.hasOwnProperty.call(drafts, it.id)) {
       parts.push(`<div class="row"><input type="text" id="fb-${esc(it.id)}" data-fb-input="${esc(it.id)}" value="${esc(drafts[it.id])}" placeholder="${arr(it.bullets).length > 1 ? '1 yes, 2 no, 3 use option B' : 'Your answer'}" maxlength="1000"><button class="btn primary" data-fb-send="${esc(it.id)}">Send</button></div>
         ${arr(it.bullets).length > 1 ? '<p class="hint">Answer per number, for example: 1 yes, 2 no, 3 use option B</p>' : ''}`);
@@ -680,38 +684,61 @@ function parsePerNumber(text) {
   return out;
 }
 
-function showCardError(id, msg) {
-  const card = document.querySelector(`[data-card="${CSS.escape(id)}"]`);
-  if (!card) return;
-  card.querySelectorAll('button').forEach((b) => { b.disabled = false; });
-  let e = card.querySelector('.error');
-  if (!e) { e = document.createElement('p'); e.className = 'error'; card.appendChild(e); }
-  e.textContent = msg;
+// Save state per card lives outside the DOM, so a live refresh never hides an error or re-enables
+// buttons while a save is still running.
+const saving = {};
+const saveErr = {};
+const NO_SAVE = ['not_granted', 'capability_disabled', 'capability_removed', 'revoked', 'invalid_argument'];
+
+function saveMessage(e) {
+  const code = (e && e.code) || 'error';
+  if (code === 'quota_exceeded') return 'The hub database is full. Delete old items at the bottom of the page, then try again.';
+  if (NO_SAVE.includes(code)) { showPermBanner(); return `Not saved: this page may not save to its database (${code}). Use "Allow saving" at the top, then try again.`; }
+  if (code === 'not_saved') return 'Not saved: the database did not keep your answer. Reload the page and try again.';
+  return `Not saved (${code}). Try again.`;
+}
+
+async function write(fn) {
+  try { return await fn(); } catch (e) {
+    if (e && e.code === 'unavailable') { await new Promise((r) => setTimeout(r, 400 + Math.random() * 600)); return fn(); }
+    throw e;
+  }
 }
 
 async function act(id, action, text) {
   const it = S.items.find((i) => i.id === id);
-  if (!it || !db) return;
-  const card = document.querySelector(`[data-card="${CSS.escape(id)}"]`);
-  if (card) card.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+  if (!it || !db || saving[id]) return;
+  saving[id] = true; delete saveErr[id]; render();
   const now = new Date().toISOString();
   try {
     if (MEANING[action]) {
       let perQ = null;
       if (action === 'approve' && arr(it.recommendations).length > 1) { perQ = {}; it.recommendations.forEach((r, i) => { perQ[String(i + 1)] = r; }); }
       if (action === 'feedback') perQ = parsePerNumber(text);
-      await db.doc(`answers/${id}`).set({ item_id: id, agent: it.agent, project: it.project, title: it.title, decision: action, text: text || '',
-        per_question: perQ, recommendation: it.recommendation || null, meaning: MEANING[action], answered_at: now, read: false });
-      await db.doc(`items/${id}`).update({ status: 'answered', needs_me: false, answer: { decision: action, text: text || '', at: now } });
+      await write(() => db.doc(`answers/${id}`).set({ item_id: id, agent: it.agent, project: it.project, title: it.title, decision: action, text: text || '',
+        per_question: perQ, recommendation: it.recommendation || null, meaning: MEANING[action], answered_at: now, read: false }));
+      const check = await db.doc(`answers/${id}`).get();
+      if (!check.exists) throw { code: 'not_saved' };
+      await write(() => db.doc(`items/${id}`).update({ status: 'answered', needs_me: false, answer: { decision: action, text: text || '', at: now } }));
       delete drafts[id];
     } else if (action === 'acknowledge') {
-      await db.doc(`items/${id}`).update({ status: it.type === 'idea' ? 'archived' : 'acknowledged', acknowledged_at: now });
+      await write(() => db.doc(`items/${id}`).update({ status: it.type === 'idea' ? 'archived' : 'acknowledged', acknowledged_at: now }));
     } else if (action === 'keep_idea') {
-      await db.doc(`items/${id}`).update({ status: 'kept', kept_at: now });
+      await write(() => db.doc(`items/${id}`).update({ status: 'kept', kept_at: now }));
     }
   } catch (e) {
-    showCardError(id, e && e.code === 'quota_exceeded' ? 'The hub database is full. Delete old items at the bottom of the page, then try again.' : `Could not save (${(e && e.code) || 'error'}). Try again.`);
+    saveErr[id] = saveMessage(e);
   }
+  delete saving[id];
+  render();
+}
+
+let perms = null;
+function showPermBanner() { document.getElementById('perm').hidden = false; }
+async function checkPerms() {
+  try { perms = await window.claude.use('permissions'); } catch (e) { perms = null; }
+  if (!perms) return;
+  try { if ((await perms.state('db')) === 'denied') showPermBanner(); } catch (e) { /* state never rejects */ }
 }
 
 async function sendMessage(agent, btn) {
@@ -841,6 +868,16 @@ document.addEventListener('click', async (e) => {
     t.disabled = false;
     return;
   }
+  if (t.id === 'perm-fix') {
+    const banner = document.getElementById('perm');
+    try {
+      if (!perms) throw new Error('no panel');
+      await perms.manage();
+      const st = await perms.state('db');
+      if (st === 'granted' || st === 'prompt') { banner.hidden = true; for (const k of Object.keys(saveErr)) delete saveErr[k]; render(); }
+    } catch (x) { banner.textContent = 'Your answers cannot be saved. Open this page\'s Permissions menu on claude.ai, allow its database, then reload.'; }
+    return;
+  }
   if (t.id === 'flt-clear') { filters = { agent: '', project: '', type: '' }; saveFilters(); render(); return; }
   if (t.id === 'add-another') { document.getElementById('add-result').hidden = true; const f = document.getElementById('add-form'); f.reset(); f.hidden = false; return; }
   if (t.id === 'prune' && db) {
@@ -939,6 +976,7 @@ function subscribe(path, key, query) {
     document.getElementById('refreshed').textContent = 'Offline';
     return;
   }
+  checkPerms();
   db.collection('projects').limit(1).get().then((q) => { if (q.empty) document.getElementById('add-panel').hidden = false; }).catch(() => {});
   subscribe('items', 'recentItems', (c) => c.orderBy('timestamp', 'desc').limit(300));
   subscribe('items', 'openItems', (c) => c.where('status', 'in', ['open', 'parked', 'kept']).limit(1000));
