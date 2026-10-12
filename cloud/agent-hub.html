@@ -151,6 +151,11 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .row { display: flex; gap: 8px; }
 .hint { color: var(--muted); font-size: 15px; }
 .error { color: var(--error); }
+.agent-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
+.agent-links a { color: var(--accent); }
+.cloud-start { display: grid; gap: 10px; justify-items: start; margin-block: 8px 16px; }
+.cloud-start label { display: grid; gap: 4px; }
+#add-result summary { cursor: pointer; color: var(--accent); margin-block: 8px; }
 
 /* Rail: agents */
 .crew { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
@@ -394,6 +399,96 @@ function violations(it) {
 
 function isRunning(a) { return Date.now() - ms(a.last_seen) < STALE_MIN * 60000; }
 
+// ---------- one-click start: cloud sessions through the Claude Code connector ----------
+const CC = 'Claude Code Remote';
+let mcp = null;
+let envs = null;
+const starting = {};
+const startErr = {};
+
+function cloudHtml(a, running) {
+  const parts = [];
+  if (a.session_url && /^https:\/\/claude\.ai\/code\//.test(a.session_url)) parts.push(`<a href="${esc(a.session_url)}" target="_blank" rel="noopener">Open session</a>`);
+  if (mcp && !running) parts.push(starting[a.agent] ? '<span class="hint" role="status">Starting...</span>'
+    : `<button class="link" data-start="${esc(a.agent)}">${a.session_id ? 'Start again' : 'Start in the cloud'}</button>`);
+  const err = startErr[a.agent] ? `<p class="error" role="alert">${esc(startErr[a.agent])}</p>` : '';
+  return parts.length || err ? `<div class="agent-links">${parts.join(' ')}</div>${err}` : '';
+}
+
+function savedEnv() { try { return localStorage.getItem('hub-env') || ''; } catch (e) { return ''; } }
+
+async function environments() {
+  if (envs) return envs;
+  const r = await mcp.callTool(CC, 'list_environments', { limit: 50 });
+  const list = (r.payload && Array.isArray(r.payload.environments) ? r.payload.environments : []).filter((e) => e && e.state !== 'deleted');
+  envs = list;
+  return envs;
+}
+
+function startMessage(e) {
+  switch (e && e.code) {
+    case 'server_not_connected': case 'selection_required': case 'server_not_found':
+      return 'Claude Code is not connected to your claude.ai account. Open claude.ai/code once, then try again.';
+    case 'needs_reauth': return 'Reconnect Claude Code in claude.ai Settings, Connectors, then try again.';
+    case 'not_in_manifest': return 'Starting agents is turned off for this page. Turn on Claude Code in the page\'s Permissions menu.';
+    case 'approval_required': return 'claude.ai asked for your approval and did not get it. Click again and choose Allow.';
+    case 'blocked_by_policy': return 'Your organization does not allow starting sessions from a page. Paste the start line instead.';
+    case 'tool_error': return `Claude Code refused: ${String(e.message || 'no reason given').slice(0, 200)}`;
+    case 'server_unavailable': case 'upstream_error': case 'cancelled':
+      return 'No answer from Claude Code. The session may have started anyway: check claude.ai/code before you try again.';
+    default: return `Could not start (${(e && e.code) || 'error'}). Paste the start line instead.`;
+  }
+}
+
+function githubRepo(repo) {
+  const m = String(repo || '').trim().match(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/);
+  return m ? m[0].replace(/\.git$/, '') : '';
+}
+
+async function startAgent(agent) {
+  const a = S.agents.find((x) => x.agent === agent);
+  if (!a || !mcp || starting[agent]) return;
+  const p = S.projects.find((x) => x.name === a.project) || {};
+  starting[agent] = true; delete startErr[agent]; render();
+  try {
+    const list = await environments();
+    const env = list.find((e) => e.environment_id === savedEnv()) || list[0];
+    const role = a.role || roleOf(agent);
+    const input = { prompt: startLine(agent, role, a.project || '', p.repo || ''), title: `${agent} (Agent Hub)`, permission_mode: 'auto', tags: ['agent-hub', `agent-hub:${a.project || ''}`] };
+    if (env) input.environment_id = env.environment_id;
+    const src = githubRepo(p.repo);
+    if (src) input.source_url = src;
+    const r = await mcp.callTool(CC, 'create_session', input);
+    const pl = r.payload || {};
+    const id = (pl.ccr && pl.ccr.id) || pl.id || pl.session_id;
+    if (!id) throw { code: 'tool_error', message: 'it did not return a session' };
+    const rec = { session_id: id, session_url: `https://claude.ai/code/${id}`, started_at: new Date().toISOString(), state: 'started' };
+    try { await db.doc(`agents/${agent}`).update(rec); } catch (x) { await db.doc(`agents/${agent}`).set(Object.assign({ agent, project: a.project || '', role }, rec)); }
+  } catch (e) {
+    startErr[agent] = startMessage(e);
+  }
+  delete starting[agent];
+  render();
+}
+
+async function startProject(project) {
+  const names = S.agents.filter((a) => a.project === project && !isRunning(a) && !a.session_id).map((a) => a.agent);
+  // The lead first: it writes the plan the others wait for.
+  names.sort((x, y) => (roleOf(y) === 'lead') - (roleOf(x) === 'lead'));
+  for (const n of names) { await startAgent(n); if (startErr[n]) break; }
+}
+
+async function fillEnvPicker() {
+  const sel = document.getElementById('env-pick');
+  if (!sel || !mcp) return;
+  try {
+    const list = await environments();
+    const cur = savedEnv();
+    sel.innerHTML = list.map((e) => `<option value="${esc(e.environment_id)}"${e.environment_id === cur ? ' selected' : ''}>${esc(e.name || e.environment_id)}</option>`).join('');
+    sel.closest('label').hidden = list.length < 2;
+  } catch (e) { const l = sel.closest('label'); if (l) l.hidden = true; }
+}
+
 function renderAgents() {
   const el = document.getElementById('agents');
   document.getElementById('agents-count').textContent = S.agents.length ? `${S.agents.filter(isRunning).length} of ${S.agents.length} running` : '';
@@ -415,6 +510,7 @@ function renderAgents() {
         <button class="agent-name" data-filter-agent="${esc(a.agent)}" title="Show only this agent">${esc(a.agent)}</button>
         <span class="agent-when">${when}</span></div>
       <p>${sub}</p>${third}
+      ${cloudHtml(a, running)}
       ${open ? `<div class="row"><input type="text" id="msg-${esc(slug(a.agent))}" data-msg-input="${esc(a.agent)}" value="${esc(msgDrafts[a.agent])}" placeholder="Message to ${esc(a.agent)}" maxlength="500"><button class="btn primary" data-msg-send="${esc(a.agent)}">Send</button></div>`
         : `<div><button class="link" data-msg-open="${esc(a.agent)}">Message</button></div>`}
     </div>`;
@@ -733,6 +829,18 @@ async function act(id, action, text) {
   render();
 }
 
+// The page also gets an mcp namespace for its own database, so check that the Claude Code connector
+// is really in this page's manifest before offering one-click start.
+async function initCloud() {
+  try {
+    const m = await window.claude.use('mcp');
+    if (!m) return;
+    const r = await m.listTools(CC);
+    const srv = (r.servers || []).find((x) => x.server === CC);
+    if (srv && (srv.tools || []).some((t) => t.name === 'create_session')) { mcp = m; render(); }
+  } catch (e) { mcp = null; }
+}
+
 let perms = null;
 function showPermBanner() { document.getElementById('perm').hidden = false; }
 async function checkPerms() {
@@ -785,12 +893,18 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
     for (const a of agents) await db.doc(`agents/${a}`).set({ agent: a, project: name, role: role(a), registered_at: now, state: 'registered' });
     const out = document.getElementById('add-result');
     const copy = (t) => `<div class="cmd"><code>${esc(t)}</code><button type="button" class="btn" data-copy="${esc(t)}">Copy</button></div>`;
-    out.innerHTML = `<h3>${esc(name)} is ready</h3>
+    const cloud = mcp ? `<div class="cloud-start"><p class="note">Start every agent as a Claude Code session in the cloud${githubRepo(repo) ? ` on ${esc(githubRepo(repo))}` : ''}. They run in auto mode and report here; the lead starts with the plan.</p>
+        <label hidden>Cloud environment <select id="env-pick"></select></label>
+        <button type="button" class="btn primary" data-start-all="${esc(name)}">Start ${agents.length} agent${agents.length === 1 ? '' : 's'} in the cloud</button>
+        <p class="hint" id="start-all-msg" role="status"></p></div>
+      <details><summary>Or start them yourself</summary>` : '';
+    out.innerHTML = `<h3>${esc(name)} is ready</h3>${cloud}
       <p class="note">For each agent, open a new Claude Code session${repo ? ` on ${esc(repo)}` : ''} (claude.ai/code, the desktop app or a terminal), switch it to auto mode so it can write to this page, and paste its line. The lead starts by writing the plan; you approve it in Needs you.</p>
-      <ol class="steps">${agents.map((a) => `<li>${esc(a)} (${role(a)})${copy(startLine(a, role(a), name, repo))}</li>`).join('')}</ol>
+      <ol class="steps">${agents.map((a) => `<li>${esc(a)} (${role(a)})${copy(startLine(a, role(a), name, repo))}</li>`).join('')}</ol>${mcp ? '</details>' : ''}
       <button type="button" class="link" id="add-another">Add another project</button>`;
     out.hidden = false;
     document.getElementById('add-form').hidden = true;
+    fillEnvPicker();
   } catch (x) {
     err.textContent = x && x.code === 'quota_exceeded' ? 'The hub database is full. Delete old items first.' : `Could not create the project (${(x && x.code) || 'error'}).`;
     err.hidden = false;
@@ -868,6 +982,17 @@ document.addEventListener('click', async (e) => {
     t.disabled = false;
     return;
   }
+  if (t.dataset.start) { startAgent(t.dataset.start); return; }
+  if (t.dataset.startAll) {
+    const project = t.dataset.startAll; const msg = document.getElementById('start-all-msg');
+    t.disabled = true; if (msg) msg.textContent = 'Starting the agents...';
+    await startProject(project);
+    const failed = S.agents.filter((a) => a.project === project && startErr[a.agent]);
+    const started = S.agents.filter((a) => a.project === project && a.session_id).length;
+    if (msg) msg.textContent = failed.length ? startErr[failed[0].agent] : `${started} agent${started === 1 ? '' : 's'} started. Each one appears under Agents with an Open session link.`;
+    t.disabled = !!started && !failed.length;
+    return;
+  }
   if (t.id === 'perm-fix') {
     const banner = document.getElementById('perm');
     try {
@@ -893,6 +1018,7 @@ document.addEventListener('toggle', (e) => {
   if (d.open) openDetails.add(d.id); else openDetails.delete(d.id);
 }, true);
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'env-pick') { try { localStorage.setItem('hub-env', e.target.value); } catch (x) { /* storage blocked */ } return; }
   const t = e.target;
   if (t.dataset && t.dataset.pf && t.tagName === 'SELECT') (pfDrafts[t.dataset.pf] = pfDrafts[t.dataset.pf] || {})[t.dataset.field] = t.value;
 });
@@ -977,6 +1103,7 @@ function subscribe(path, key, query) {
     return;
   }
   checkPerms();
+  initCloud();
   db.collection('projects').limit(1).get().then((q) => { if (q.empty) document.getElementById('add-panel').hidden = false; }).catch(() => {});
   subscribe('items', 'recentItems', (c) => c.orderBy('timestamp', 'desc').limit(300));
   subscribe('items', 'openItems', (c) => c.where('status', 'in', ['open', 'parked', 'kept']).limit(1000));

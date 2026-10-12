@@ -46,7 +46,7 @@ can create artifacts:
 
 ```text
 Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for me:
-1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities.
+1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments and create_session.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
@@ -71,12 +71,30 @@ The page is private, so only you can open it. To give a colleague access, use th
    - **Priority**: P1, P2 or P3. Cards from P1 projects always come first.
    - **GitHub repo or folder** (optional): where the code lives.
    - **Brief**: what the app is, who it is for, the must-have features, what is out of scope, and the deadline.
-3. Click **Create project**. You get one start line per agent, each with a Copy button.
-4. For each agent, open a new Claude Code session on the project's repo or folder:
+3. Click **Create project**.
+4. Click **Start in the cloud**. The hub starts every agent as a Claude Code session on claude.ai,
+   in auto mode, on the project's GitHub repo. The lead starts first. If you have more than one
+   cloud environment, pick one first; the hub remembers it. The first time, claude.ai asks you to
+   allow the page to use Claude Code.
+
+### Starting and restarting agents
+
+- Each started agent shows **Open session** in the Agents list, so you can watch it work.
+- An agent that stopped shows **Start again**. Use it when the lead flags that an agent is needed.
+- A failed start says why on the agent's card, for example that Claude Code is not connected.
+  When the message says the session may have started anyway, check claude.ai/code before you
+  click again, so you do not run the same agent twice.
+
+### Start agents yourself
+
+Under **Or start them yourself** you get one start line per agent, each with a Copy button. Use
+them to run agents on your own computer:
+
+1. For each agent, open a new Claude Code session on the project's repo or folder:
    claude.ai/code, the Claude desktop app, or `claude` in a terminal.
-5. Switch the session to **auto mode** (Shift+Tab in the terminal, or the mode menu in the app)
+2. Switch the session to **auto mode** (Shift+Tab in the terminal, or the mode menu in the app)
    so the agent can write to the hub without asking you each time.
-6. Paste the start line. It begins with `/loop`, which keeps the agent working on its own.
+3. Paste the start line. It begins with `/loop`, which keeps the agent working on its own.
 
 ### Write a brief the lead can plan from
 
@@ -513,7 +531,9 @@ The lead's playbook is [LEAD-AGENT.md](../LEAD-AGENT.md).
 | Problem | Fix |
 |---|---|
 | An agent keeps asking permission to write to the hub | Switch its session to auto mode, or approve once and allow ArtifactData for the session. |
-| An agent shows Idle | It has not checked in for 30 minutes. Open its session: if the `/loop` ended, paste the start line again. Loops end after 7 days. |
+| An agent shows Idle | It has not checked in for 30 minutes. Click **Start again** on its card, or open its session and paste the start line again. Loops end after 7 days. |
+| Answers do not save | The page shows "Not saved" on the card and an **Allow saving** banner. Click it and allow the page's database, then answer again. |
+| No **Start in the cloud** button | The page was published without the Claude Code connector, or you turned it off in the page's Permissions menu. Paste the start lines instead. |
 | Your answer did not reach the agent | Agents read answers on their next loop check, usually within minutes. If the agent stopped, the lead takes the answer over within 30 minutes. |
 | An agent asked you in its own chat | Tell it: "Use the hub for questions." The protocol says the hub is the only channel. |
 | A UI card has no screenshot | The card shows a warning. Click **More info** and ask for the screenshot. |

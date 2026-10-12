@@ -17,8 +17,8 @@ You answer a question with one click, from your desk or your phone, and never op
   logins, money or personal data, QA on anything a user sees.
 - **Your customers test the app before they see it.** Describe Maria, 68, on a phone with poor
   eyesight. An agent uses the app at 200% zoom as Maria and sends you the screenshots of where she got stuck.
-- **Nothing to install.** Claude builds the dashboard for you as a private page on claude.ai.
-  Agents run in any Claude Code session.
+- **One click starts the whole team.** Claude builds the dashboard for you as a private page on
+  claude.ai. **Start in the cloud** launches every agent as a Claude Code session. Nothing to install.
 
 [Set it up in 3 steps](#set-it-up-in-3-steps) · [Read the manual](docs/MANUAL.md) · [Team guide](docs/TEAMS.md)
 
@@ -250,7 +250,7 @@ Before we shipped this version, we pointed Agent Hub at its own code. Real agent
 
 ```text
 Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for me:
-1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities.
+1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments and create_session.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
@@ -264,8 +264,11 @@ line per agent.
 
 ![The Add project form with a team, a priority and a brief](docs/img/add-project.png)
 
-**3. Start the agents.** For each agent, open a Claude Code session on the project (claude.ai/code,
-the desktop app or a terminal), switch it to auto mode and paste its start line.
+**3. Start the agents with one click.** Click **Start in the cloud**. The hub starts every agent
+as a Claude Code session on claude.ai, in auto mode, on your GitHub repo, lead first. Each agent
+gets an **Open session** link in the Agents list, and **Start again** brings back one that stopped.
+Prefer your own machine? Open a Claude Code session per agent, switch it to auto mode and paste
+its start line.
 
 The lead posts the plan to **Needs you** within minutes. Approve it and the team starts building.
 For the next project, click **Add project** again. One hub serves all of them.
