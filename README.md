@@ -245,6 +245,10 @@ Before we shipped this version, we pointed Agent Hub at its own code. Real agent
   line). It was fixed before release. That is the point of the checks: no fix is trusted until an
   agent other than the one who made it has tested it.
 
+The full reports the agents wrote are on the
+[selftest branch](https://github.com/giovannibrees/Claude-Dashboard/tree/selftest/docs): code
+audits in `docs/audits/`, user tests with screenshots in `docs/user-tests/`.
+
 ---
 
 ## Set it up in 3 steps
