@@ -99,6 +99,20 @@ Leave out fields that do not apply. Rules per type:
 | handover | false | open | `to_agent`, `task`; set the task's `pending_owner` |
 | audit | false | info | lead only; `priority: high` when the CEO should look |
 
+### Phone alerts
+
+Right after you post an item with `needs_me: true`, `get` collection `config`, doc_id `alerts`
+and read `level` (missing doc or field: `important`):
+
+- `important`: alert when the item has `priority: high` or `reversible: false`.
+- `all`: alert for every item with `needs_me: true`.
+- `off`: never alert.
+
+To alert, call the PushNotification tool once (load it with ToolSearch `select:PushNotification`)
+with `status: "proactive"` and the message `<project>: <title>. Open the Agent Hub.` (under 200
+characters). One alert per item, never for status, idea or delivery items. If the tool does not
+exist or says it was not sent, carry on: the card is in the hub either way.
+
 ## 4. Plan and tasks
 
 - `projects/<project>`: name, goal, brief, phase (`planning`, `building`, `complete`),

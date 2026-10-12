@@ -149,6 +149,20 @@ recommendation. Questions come batched, numbered, each with its own recommendati
 
 ![Feedback per number](img/card-feedback.png)
 
+### Phone alerts
+
+When a card needs you, the agent that posted it sends a push notification to the Claude app on
+your phone. Choose how often next to the **Needs you** heading:
+
+| Setting | You get an alert for |
+|---|---|
+| **Important cards** (default) | High-priority cards and decisions that cannot be undone |
+| **Every card** | Every question and approval |
+| **Off** | Nothing; check the page yourself |
+
+Status updates, ideas and deliveries never send an alert. Alerts reach you when notifications for
+the Claude app are on; the card is in the hub either way.
+
 ### The 4-hour rule
 
 Agents never sit idle waiting for you. While a question is open they keep working on everything

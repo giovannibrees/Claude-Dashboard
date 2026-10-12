@@ -83,6 +83,9 @@ not a description of it.
 | **More info** | The agent comes back with the missing facts. |
 | **Not approved** | The agent drops it and carries on with other work. |
 
+**Your phone buzzes when it matters.** Agents send a push alert for high-priority cards and
+anything that cannot be undone, or for every card if you prefer. Set it next to **Needs you**.
+
 **You are never the bottleneck.** A reversible decision shows a 4-hour clock. If you have not
 answered by then, the agent goes with its own recommendation and tells you. Anything you cannot
 undo (deleting data, payments, publishing, production) waits for you, no exceptions.

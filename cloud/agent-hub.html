@@ -151,6 +151,9 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .row { display: flex; gap: 8px; }
 .hint { color: var(--muted); font-size: 15px; }
 .error { color: var(--error); }
+.needs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.alerts { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
+.alerts select { min-width: 0; }
 .agent-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .agent-links a { color: var(--accent); }
 .cloud-start { display: grid; gap: 10px; justify-items: start; margin-block: 8px 16px; }
@@ -283,7 +286,10 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
         <ul class="digest" id="digest"></ul>
       </section>
       <section class="block" id="needs-block">
-        <h2>Needs you</h2>
+        <div class="needs-head"><h2>Needs you</h2>
+          <label class="alerts" id="alerts-wrap" hidden>Phone alerts <select id="alerts-level">
+            <option value="important">Important cards</option><option value="all">Every card</option><option value="off">Off</option></select></label></div>
+        <p class="error" id="alerts-err" hidden></p>
         <div id="needs" class="cards"><p class="empty">Nothing needs you right now.</p></div>
       </section>
       <section class="block" id="deliveries-block" hidden>
@@ -1018,6 +1024,12 @@ document.addEventListener('toggle', (e) => {
   if (d.open) openDetails.add(d.id); else openDetails.delete(d.id);
 }, true);
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'alerts-level') {
+    const err = document.getElementById('alerts-err'); err.hidden = true;
+    db.doc('config/alerts').set({ level: e.target.value, updated_at: new Date().toISOString() })
+      .catch((x) => { err.textContent = saveMessage(x); err.hidden = false; });
+    return;
+  }
   if (e.target.id === 'env-pick') { try { localStorage.setItem('hub-env', e.target.value); } catch (x) { /* storage blocked */ } return; }
   const t = e.target;
   if (t.dataset && t.dataset.pf && t.tagName === 'SELECT') (pfDrafts[t.dataset.pf] = pfDrafts[t.dataset.pf] || {})[t.dataset.field] = t.value;
@@ -1113,6 +1125,13 @@ function subscribe(path, key, query) {
   subscribe('tasks', 'tasks', (c) => c.limit(1000));
   subscribe('answers', 'unread', (c) => c.where('read', '==', false).limit(500));
   subscribe('personas', 'personas', (c) => c.limit(500));
+  // Phone alert level: agents read config/alerts before they push a notification.
+  db.doc('config/alerts').onSnapshot((d) => {
+    const lv = (d.exists && d.data().level) || 'important';
+    const sel = document.getElementById('alerts-level');
+    if (document.activeElement !== sel) sel.value = ['important', 'all', 'off'].includes(lv) ? lv : 'important';
+    document.getElementById('alerts-wrap').hidden = false;
+  }, () => {});
   setInterval(render, 60000); // keeps "time ago", idle dots and 4-hour clocks current
 })();
 </script>
