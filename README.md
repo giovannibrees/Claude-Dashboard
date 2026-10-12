@@ -285,7 +285,7 @@ For the next project, click **Add project** again. One hub serves all of them.
 ## Questions
 
 **What does it cost?**
-Agent Hub itself is free to use under the license below. The agents run on your own Claude plan.
+Running Agent Hub for your own projects is free under the license below. The agents run on your own Claude plan.
 To keep usage down: agents stop when their work is delivered instead of waiting, reviewers wake
 only when there is something to review, and the [team guide](docs/TEAMS.md#keeping-cost-down)
 shows which roles can run on a cheaper model.
@@ -320,6 +320,10 @@ Claude Code hooks. See the [manual](docs/MANUAL.md#11-the-local-version).
 
 ## License
 
-You may use and change Agent Hub for your own or your organization's internal use.
-Copying, redistributing, selling or offering it as a service needs written permission.
-See [LICENSE](LICENSE).
+Source available, all rights reserved. This is not open source.
+
+- You may run Agent Hub to manage your own projects, free of charge.
+- Copying, sharing, reselling, using it for client work, offering it as a service or building a
+  competing product needs a written license.
+
+See [LICENSE](LICENSE). For a commercial license, contact [Giovanni Brees](https://github.com/giovannibrees).

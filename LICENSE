@@ -1,25 +1,36 @@
-Agent Hub License
+Agent Hub License (source available, all rights reserved)
 
 Copyright (c) 2026 Giovanni Brees. All rights reserved.
 
-1. Use. You may download, install and run this software, free of charge, and change it for your
-   own use or your organization's internal use.
+The source code is published so people can read and evaluate it. Publishing it does not make it
+open source and grants no rights except those stated below.
 
-2. Not allowed without written permission from the copyright holder:
-   - copying, publishing or redistributing the software, changed or unchanged, in whole or in
-     substantial part, including in another repository, package, template or product;
-   - selling, renting or sublicensing it;
-   - offering it, or a product built from it, as a hosted or managed service to others;
-   - removing or changing this license or the copyright notice.
+1. Permitted use. One person or one organization may install and run this software, free of
+   charge, to manage its own projects, and may change it only as far as needed for that own use.
 
-3. Contributions. Changes you send to the copyright holder may be used by the copyright holder
-   under any terms.
+2. Not permitted without a separate written license from the copyright holder:
+   - copying, publishing, redistributing or sharing the software or any substantial part of it,
+     changed or unchanged, in any form, including in another repository, package, template,
+     course or product;
+   - selling, renting, lending or sublicensing it;
+   - using it to deliver work or services to clients or third parties;
+   - offering it, or anything built from it, as a hosted, managed or white-label service;
+   - using it, its design, its documentation or its agent rules to build a product that competes
+     with it;
+   - removing or changing this license or any copyright notice.
 
-4. No warranty. The software is provided "as is", without warranty of any kind. In no event shall
-   the copyright holder be liable for any claim, damages or other liability arising from the
-   software or its use.
+3. GitHub. GitHub's Terms of Service let GitHub users view and fork public repositories on
+   GitHub. No other right follows from that, and a fork is covered by this license.
 
-5. Ending. Your permission ends automatically if you break these terms.
+4. Feedback. Ideas, changes or reports you send to the copyright holder may be used by the
+   copyright holder for any purpose without obligation to you.
 
-For permission beyond these terms, contact the copyright holder through
+5. Ending. Your permission ends automatically if you break these terms. You must then stop using
+   the software and delete all copies.
+
+6. No warranty. The software is provided "as is", without warranty of any kind. The copyright
+   holder is not liable for any claim, damages or other liability arising from the software or
+   its use.
+
+For a license beyond these terms, contact the copyright holder through
 https://github.com/giovannibrees.
