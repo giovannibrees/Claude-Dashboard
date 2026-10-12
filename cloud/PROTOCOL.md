@@ -206,6 +206,22 @@ Every check, any phase:
   "<agent> stopped with an answer waiting" with the line the CEO should paste to restart it.
 - Priorities: projects have `priority` P1, P2 or P3 set by the CEO. Work and escalations for
   P1 projects come first.
+- Budget: for every agent of the project whose agents doc has a `session_id`, call the
+  `get_session` tool of the Claude Code Remote connector (ToolSearch
+  `select:mcp__claude-code-remote__get_session`) with that `session_id` and read
+  `external_metadata.usage.cost_usd`. Write it to that agents doc as `cost_usd` (rounded to
+  cents, only when it changed) and the project total as `spent_usd` on the project doc. Your
+  own session's cost reads as absent: keep the stored value. Then compare with the project's
+  `budget_usd` (none set: no limit):
+  - 80% or more and `budget_warned` is not true: post a question "Budget 80% used on <project>"
+    (`priority: high`, `reversible: false`) with spent, budget and what is left to build, and
+    the recommendation (raise to an amount, or cut scope). Set `budget_warned: true`.
+  - 100% or more: send every agent of the project a directive "Budget reached: finish the
+    current step, commit and push, post a status, then stop." Set the project
+    `budget_paused: true`, post the same kind of question "Budget reached on <project>", and
+    start no new work until the CEO raises `budget_usd` above `spent_usd`. Then clear
+    `budget_paused` and `budget_warned` and tell the CEO in one status item which agents to
+    start again.
 
 Phase building, about every 30 minutes:
 - Read `agents`, `tasks`, open `items` and the repo's git log. Look for: an agent idle over

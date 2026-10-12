@@ -39,7 +39,7 @@ can create artifacts:
 
 ```text
 Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for me:
-1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments and create_session.
+1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments, create_session and get_session.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
@@ -390,6 +390,19 @@ work sent back by checks, stalled tasks, lead flags and how many items need you.
 from the hub's own data, so it costs nothing.
 
 ![Last 24 hours](img/digest.png)
+
+### Cost and budget
+
+Each project card shows what its agents have cost so far, read from the Claude Code sessions the
+hub started, and refreshed every 10 minutes while the page is open and at every lead check.
+
+- **Budget in $**: type an amount and press Enter. Leave it empty for no limit.
+- **At 80%** the lead sends you a high-priority card: raise the budget or cut scope.
+- **At 100%** the lead tells every agent to finish its current step, push its work and stop, and
+  asks you whether to raise the budget. Raise it on the project card, then use **Start again**
+  on the agents the lead names.
+- Agents you started yourself from a start line are not counted, because the hub does not know
+  their sessions.
 
 ### Priorities
 

@@ -192,6 +192,9 @@ Nothing changes until you approve, except critical security holes, which are fix
 
   ![Last 24 hours: gym-app 3 tasks done, 1 delivered, 2 need you](docs/img/digest.png)
 
+- **Cost per project, with a budget.** Every project card shows what its agents cost so far. Set
+  a budget: at 80% the lead warns you, at 100% the agents finish their step and stop until you
+  raise it.
 - **Priorities.** Mark projects P1, P2 or P3. Cards from P1 always come first.
 - **Message all leads.** One instruction to every project at once, for example "Pause all deploys
   until Monday". Each lead passes it on to its own agents.
@@ -256,7 +259,7 @@ audits in `docs/audits/`, user tests with screenshots in `docs/user-tests/`.
 
 ```text
 Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for me:
-1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments and create_session.
+1. Publish cloud/agent-hub.html as an artifact with the db and assets capabilities, and the mcp capability for the "Claude Code Remote" connector with the tools list_environments, create_session and get_session.
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".

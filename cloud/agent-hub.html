@@ -154,6 +154,15 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .needs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
 .alerts { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
 .alerts select { min-width: 0; }
+.cost { display: grid; gap: 6px; margin-block: 4px; }
+.cost p { margin: 0; }
+.cost .chip { white-space: nowrap; }
+.cost .bar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.cost .bar span { display: block; height: 100%; background: var(--ok); }
+.cost.near .bar span { background: var(--warn); }
+.cost.over .bar span { background: var(--error); }
+.budget { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
+.budget input { width: 7em; }
 .agent-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .agent-links a { color: var(--accent); }
 .cloud-start { display: grid; gap: 10px; justify-items: start; margin-block: 8px 16px; }
@@ -597,6 +606,54 @@ function renderDigest() {
   document.getElementById('digest').innerHTML = lines.join('');
 }
 
+// ---------- cost per project ----------
+// Costs come from the Claude Code sessions the hub started (get_session). The page stores them on
+// the agents and projects docs, so the lead can enforce the budget while this page is closed.
+const budgetDrafts = {};
+const money = (n) => `$${(Math.round(Number(n) * 100) / 100).toFixed(2)}`;
+
+function projectSpent(p) {
+  return S.agents.filter((a) => a.project === p.name).reduce((t, a) => t + (Number(a.cost_usd) || 0), 0);
+}
+
+function costHtml(p) {
+  const spent = projectSpent(p);
+  const budget = Number(p.budget_usd) || 0;
+  const pct = budget ? Math.min(100, (spent / budget) * 100) : 0;
+  const state = budget && spent >= budget ? 'over' : budget && spent >= 0.8 * budget ? 'near' : '';
+  const draft = Object.prototype.hasOwnProperty.call(budgetDrafts, p.name) ? budgetDrafts[p.name] : (budget || '');
+  return `<div class="cost${state ? ` ${state}` : ''}">
+    <p><strong>${money(spent)}</strong> spent${budget ? ` of ${money(budget)} budget` : ''}${state === 'over' ? ' <span class="chip hot">Budget reached</span>' : state === 'near' ? ' <span class="chip soft">80% of budget</span>' : ''}</p>
+    ${budget ? `<div class="bar" role="img" aria-label="${Math.round(pct)}% of budget used"><span style="width:${pct}%"></span></div>` : ''}
+    <label class="budget" for="budget-${esc(p.name)}">Budget in $ <input type="number" min="0" step="5" inputmode="decimal" id="budget-${esc(p.name)}" data-budget="${esc(p.name)}" value="${esc(draft)}" placeholder="none"></label>
+  </div>`;
+}
+
+let costsOn = false;
+let costsRun = false;
+let costsBusy = false;
+async function refreshCosts() {
+  if (!costsOn || !db || costsBusy) return;
+  if (!S.agents.length) return; // the agents snapshot calls this again once it arrives
+  costsBusy = true; costsRun = true;
+  for (const a of S.agents.filter((x) => x.session_id)) {
+    try {
+      const r = await mcp.callTool(CC, 'get_session', { session_id: a.session_id }, { cache: false });
+      const pl = r.payload || {};
+      const sess = pl.ccr || pl;
+      const usd = Number(sess && sess.external_metadata && sess.external_metadata.usage && sess.external_metadata.usage.cost_usd);
+      if (!Number.isFinite(usd)) continue;
+      const rounded = Math.round(usd * 100) / 100;
+      if (rounded !== Number(a.cost_usd)) await db.doc(`agents/${a.agent}`).update({ cost_usd: rounded, cost_at: new Date().toISOString() });
+    } catch (e) { /* keep the last known cost */ }
+  }
+  for (const p of S.projects) {
+    const spent = Math.round(projectSpent(p) * 100) / 100;
+    if (spent !== Number(p.spent_usd || 0)) { try { await db.doc(`projects/${p.name}`).update({ spent_usd: spent, spent_at: new Date().toISOString() }); } catch (e) { /* next refresh */ } }
+  }
+  costsBusy = false;
+}
+
 function renderProjects() {
   document.getElementById('projects-block').hidden = !S.projects.length;
   const order = ['done', 'review', 'in-progress', 'ready-for-dev', 'backlog'];
@@ -609,6 +666,7 @@ function renderProjects() {
     return `<div class="project">
       <div class="project-top"><h3>${esc(p.name)}</h3><span class="chip${p.phase === 'building' ? ' soft' : ''}">${esc(p.phase || 'planning')}</span></div>
       <label class="prio" for="prio-${esc(p.name)}">Priority <select id="prio-${esc(p.name)}" data-prio="${esc(p.name)}">${['P1', 'P2', 'P3'].map((v) => `<option${(p.priority || 'P2') === v ? ' selected' : ''}>${v}</option>`).join('')}</select></label>
+      ${costHtml(p)}
       <label class="auto" for="auto-${esc(p.name)}"><input type="checkbox" id="auto-${esc(p.name)}" data-auto="${esc(p.name)}"${p.auto_release === false ? '' : ' checked'}> Release automatically when all checks pass</label>
       ${p.goal ? `<p>${esc(p.goal)}</p>` : ''}
       <div class="seg" role="img" aria-label="${n.done} of ${tasks.length} tasks done">${seg}</div>
@@ -727,7 +785,7 @@ function section(id, list, empty, opts) {
 
 function render() {
   const a = document.activeElement;
-  const focusId = a && a.id && (a.dataset.fbInput || a.dataset.msgInput || a.dataset.pf) && a.tagName === 'INPUT' ? a.id : null;
+  const focusId = a && a.id && (a.dataset.fbInput || a.dataset.msgInput || a.dataset.pf || a.dataset.budget) && a.tagName === 'INPUT' ? a.id : null;
   const caret = focusId ? a.selectionStart : null;
 
   renderFilters(); renderAgents(); renderProjects(); renderDigest();
@@ -843,7 +901,10 @@ async function initCloud() {
     if (!m) return;
     const r = await m.listTools(CC);
     const srv = (r.servers || []).find((x) => x.server === CC);
-    if (srv && (srv.tools || []).some((t) => t.name === 'create_session')) { mcp = m; render(); }
+    if (srv && (srv.tools || []).some((t) => t.name === 'create_session')) {
+      mcp = m; render();
+      if ((srv.tools || []).some((t) => t.name === 'get_session')) { costsOn = true; refreshCosts(); setInterval(refreshCosts, 10 * 60000); }
+    }
   } catch (e) { mcp = null; }
 }
 
@@ -1024,6 +1085,15 @@ document.addEventListener('toggle', (e) => {
   if (d.open) openDetails.add(d.id); else openDetails.delete(d.id);
 }, true);
 document.addEventListener('change', (e) => {
+  if (e.target.dataset.budget) {
+    const name = e.target.dataset.budget;
+    const v = e.target.value.trim() === '' ? 0 : Number(e.target.value);
+    if (!Number.isFinite(v) || v < 0) return;
+    db.doc(`projects/${name}`).update({ budget_usd: Math.round(v * 100) / 100 })
+      .then(() => { delete budgetDrafts[name]; render(); })
+      .catch((x) => projectMsg(name, saveMessage(x)));
+    return;
+  }
   if (e.target.id === 'alerts-level') {
     const err = document.getElementById('alerts-err'); err.hidden = true;
     db.doc('config/alerts').set({ level: e.target.value, updated_at: new Date().toISOString() })
@@ -1036,6 +1106,7 @@ document.addEventListener('change', (e) => {
 });
 
 document.addEventListener('input', (e) => {
+  if (e.target.dataset.budget) { budgetDrafts[e.target.dataset.budget] = e.target.value; return; }
   const t = e.target;
   if (t.dataset.pf) { (pfDrafts[t.dataset.pf] = pfDrafts[t.dataset.pf] || {})[t.dataset.field] = t.value; }
   if (t.dataset.fbInput) drafts[t.dataset.fbInput] = t.value;
@@ -1103,6 +1174,7 @@ function subscribe(path, key, query) {
   q.onSnapshot((snap) => {
     S[key] = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
     if (ITEM_KEYS.includes(key)) mergeItems();
+    if (key === 'agents' && !costsRun) refreshCosts();
     render();
   }, () => { const l = document.getElementById('refreshed'); l.classList.add('off'); l.textContent = 'Connection lost. Reload the page.'; });
 }
