@@ -163,6 +163,13 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .cost.over .bar span { background: var(--error); }
 .budget { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
 .budget input { width: 7em; }
+.gh { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 14px; }
+.gh a { color: var(--accent); }
+.gh-line { margin: 0; }
+.ci { font-weight: 600; }
+.ci::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--idle); }
+.ci.pass { color: var(--ok); } .ci.pass::before { background: var(--ok); }
+.ci.fail { color: var(--error); } .ci.fail::before { background: var(--error); }
 .agent-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .agent-links a { color: var(--accent); }
 .cloud-start { display: grid; gap: 10px; justify-items: start; margin-block: 8px 16px; }
@@ -214,6 +221,7 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .tasks li { padding: 7px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 0 10px; font-size: 15px; }
 .tid { font-family: var(--mono); font-size: 13px; color: var(--muted); padding-top: 2px; }
 .tstatus { grid-column: 2; color: var(--muted); font-size: 14px; }
+.tasks .gh { grid-column: 2; }
 .tstatus.in-progress { color: var(--accent); }
 
 @media (max-width: 960px) {
@@ -579,6 +587,20 @@ async function directProject(project, role, text) {
   return target;
 }
 
+// GitHub status an agent recorded on a task or card: pull request, CI result, preview link.
+const CI_LABEL = { pass: 'CI passed', fail: 'CI failed', pending: 'CI running' };
+function githubHtml(x) {
+  const pr = x && x.pr && typeof x.pr === 'object' ? x.pr : null;
+  const prUrl = pr ? safeUrl(pr.url) : '';
+  const prev = x ? safeUrl(x.preview_url) : '';
+  if (!prUrl && !prev) return '';
+  const parts = [];
+  if (prUrl) parts.push(`<a href="${esc(prUrl)}" target="_blank" rel="noopener">PR${pr.number ? ` #${esc(pr.number)}` : ''}</a>`);
+  if (prUrl && CI_LABEL[pr.ci]) parts.push(`<span class="ci ${esc(pr.ci)}" title="${pr.checked_at ? `checked ${esc(ago(pr.checked_at))}` : ''}">${CI_LABEL[pr.ci]}</span>`);
+  if (prev) parts.push(`<a href="${esc(prev)}" target="_blank" rel="noopener">Preview</a>`);
+  return `<span class="gh">${parts.join('')}</span>`;
+}
+
 function checksText(t) {
   const req = arr(t.checks_required);
   if (!req.length || t.status === 'backlog' || t.status === 'ready-for-dev') return '';
@@ -681,7 +703,7 @@ function renderProjects() {
         <div class="cards">
           <p><strong>In scope:</strong> ${arr(p.scope).map(esc).join('; ') || 'not set yet'}</p>
           ${arr(p.never).length ? `<p><strong>Never:</strong> ${arr(p.never).map(esc).join('; ')}</p>` : ''}
-          <ul class="tasks">${tasks.map((t) => `<li><span class="tid">${esc(t.id)}</span><span>${esc(t.title)}</span><span class="tstatus ${esc(t.status)}">${esc(label[t.status] || t.status)}${t.owner ? ` · ${esc(t.owner)}` : ''}${t.pending_owner ? ` → ${esc(t.pending_owner)}` : ''}${checksText(t)}</span></li>`).join('')}</ul>
+          <ul class="tasks">${tasks.map((t) => `<li><span class="tid">${esc(t.id)}</span><span>${esc(t.title)}</span><span class="tstatus ${esc(t.status)}">${esc(label[t.status] || t.status)}${t.owner ? ` · ${esc(t.owner)}` : ''}${t.pending_owner ? ` → ${esc(t.pending_owner)}` : ''}${checksText(t)}</span>${githubHtml(t)}</li>`).join('')}</ul>
         </div>
       </details>
       ${profilesHtml(p)}
@@ -755,6 +777,8 @@ function cardHtml(it, opts) {
     bulletsHtml(it)];
   const links = arr(it.links);
   if (links.length) parts.push(`<ul>${links.map((l) => { const u = safeUrl(l); return `<li>${u ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(l)}</a>` : esc(l)}</li>`; }).join('')}</ul>`);
+  const gh = githubHtml(it);
+  if (gh) parts.push(`<p class="gh-line">${gh}</p>`);
   if (arr(it.verification).length) parts.push(`<ul class="evidence">${arr(it.verification).map((v) => `<li>${esc(v)}</li>`).join('')}</ul>`);
   parts.push(attachmentsHtml(it));
   const open = it.needs_me && it.status === 'open';

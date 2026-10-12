@@ -210,7 +210,8 @@ Nothing changes until you approve, except critical security holes, which are fix
 - **Lessons carried forward.** After each project the lead saves up to 5 one-line lessons and
   reads them when it plans the next one.
 - **An ideas backlog.** Good ideas from agents and test users are parked, not built. You decide later.
-- **Finished work with proof.** Deliveries come with links, test results and screenshots.
+- **Finished work with proof.** Deliveries come with links, test results and screenshots, and
+  every task shows its pull request, CI result and preview link.
 
   ![A delivery card with the link and test results](docs/img/card-delivery.png)
 

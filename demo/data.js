@@ -64,5 +64,11 @@ const DATA = {
 const SESS = { 'lead-gym-app': 'session_demo_lead', 'builder-gym-app': 'session_demo_b1', 'builder-2-gym-app': 'session_demo_b2', 'reviewer-gym-app': 'session_demo_rev' };
 DATA.agents.forEach((a) => { if (SESS[a.agent]) { a.session_id = SESS[a.agent]; } });
 DATA.projects.forEach((p) => { if (p.name === 'gym-app') p.budget_usd = 75; });
+DATA.tasks.forEach((t) => {
+  if (t.id === 'T-4') { t.pr = { url: 'https://github.com/acme/gym-app/pull/14', number: 14, ci: 'pass', checked_at: iso(9) }; t.preview_url = 'https://pr-14.gym-app.example.com'; }
+  if (t.id === 'T-5') t.pr = { url: 'https://github.com/acme/gym-app/pull/15', number: 15, ci: 'pending', checked_at: iso(4) };
+  if (t.id === 'client-portal--T-1') t.pr = { url: 'https://github.com/acme/client-portal/pull/3', number: 3, ci: 'fail', checked_at: iso(20) };
+});
+DATA.items.forEach((i) => { if (i.type === 'delivery' && !i.pr) { i.pr = { url: 'https://github.com/acme/gym-app/pull/12', number: 12, ci: 'pass', checked_at: iso(30) }; i.preview_url = 'https://pr-12.gym-app.example.com'; } });
 DATA.config = [{ id: 'alerts', level: 'important' }];
 window.HUB_DEMO.load(DATA);

@@ -30,8 +30,6 @@ every part of it.
 - A GitHub repo per project, if you want the agents to start in the cloud with one click.
 - The Claude app on your phone, if you want alerts and to answer on the go.
 
----
-
 Want to look around first? The [demo hub](https://claude.ai/artifact/9mGDgzk2MaJXm4EzJMg74A) has
 sample projects, agents and cards. It is built from `demo/` in this repo (`python3 demo/build.py`).
 
@@ -438,6 +436,12 @@ Turn the switch off to approve every release yourself.
 
 After each project the lead saves up to 5 one-line lessons, for example "Ask about the payment
 provider before planning checkout". It reads them when it plans the next project.
+
+### GitHub status
+
+Tasks and cards show their pull request, its CI result and a preview link when the agents work
+in GitHub: **PR #14 · CI passed · Preview**. The builder records it when the task goes to review,
+and the lead refreshes the CI result at every check. A task with failing CI cannot be marked done.
 
 ### Deliveries, flags and ideas
 

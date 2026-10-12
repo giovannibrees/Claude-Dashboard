@@ -139,6 +139,12 @@ a push and an email. One alert per item, never for status, idea or delivery item
   directive with the findings (file, line, what goes wrong, severity). The same builder fixes it.
 - Only the lead sets `done`, and only when every check in `checks_required` has `result: pass`.
   More than 5 review loops on one task: the lead asks the CEO.
+- GitHub: when the task's work is in a pull request, set
+  `pr: {"url": "<pull request url>", "number": 12, "ci": "pending" | "pass" | "fail", "checked_at": "<now>"}`
+  on the task, and `preview_url` when a preview deploy exists. `ci` is the combined result of the
+  pull request's checks on its latest commit. Set it when you move the task to review; the lead
+  refreshes `ci` for every task in `review` at each check. Delivery items carry the same `pr` and
+  `preview_url` fields when they apply.
 - Accept a handover: set `owner` to you, remove `pending_owner`, set the handover item's
   `status: accepted`.
 - Scope changes need an approved approval with `change`; only then the lead edits `scope`.
@@ -230,6 +236,8 @@ Phase building, about every 30 minutes:
   break the rules.
 - Correct agents with directives. Review tasks in `review` against the real diff and test
   output, never the agent's own summary, then set `done` with evidence or send them back.
+- For every task in `review` with a `pr`, read the pull request's checks on its latest commit and
+  update `pr.ci` and `pr.checked_at`. A task whose `ci` is `fail` cannot be `done`.
 - Post one `audit` item (`priority: high`) only when the CEO should look. Otherwise stay quiet.
 - No progress on a task across 2 audits (same status, no new commits): find out why, then
   unblock it or escalate.
