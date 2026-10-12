@@ -43,6 +43,7 @@ Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for 
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
+5. Create a routine named "Agent Hub alert" with no schedule, a fresh session per run and push and email notifications on. Its prompt: relay the appended message as the final answer, plus a link to the hub, without using tools. Store its trigger id in the database: collection "config", doc "alert-relay", field "trigger_id".
 Then give me the link.
 ```
 
@@ -144,8 +145,9 @@ recommendation. Questions come batched, numbered, each with its own recommendati
 
 ### Phone alerts
 
-When a card needs you, the agent that posted it sends a push notification to the Claude app on
-your phone. Choose how often next to the **Needs you** heading:
+When a card needs you, the agent that posted it sends you a push notification and an email
+through a Claude routine called **Agent Hub alert**. Choose how often next to the **Needs you**
+heading:
 
 | Setting | You get an alert for |
 |---|---|
@@ -153,8 +155,10 @@ your phone. Choose how often next to the **Needs you** heading:
 | **Every card** | Every question and approval |
 | **Off** | Nothing; check the page yourself |
 
-Status updates, ideas and deliveries never send an alert. Alerts reach you when notifications for
-the Claude app are on; the card is in the hub either way.
+Status updates, ideas and deliveries never send an alert. The setup prompt creates the routine:
+it has no schedule and only runs when an agent fires it, about a minute of Claude time per alert.
+Its id is stored in the hub (`config/alert-relay`). Without it, agents skip the alert and the card
+is in the hub either way.
 
 ### The 4-hour rule
 

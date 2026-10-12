@@ -83,7 +83,7 @@ not a description of it.
 | **More info** | The agent comes back with the missing facts. |
 | **Not approved** | The agent drops it and carries on with other work. |
 
-**Your phone buzzes when it matters.** Agents send a push alert for high-priority cards and
+**Your phone buzzes when it matters.** Agents send a push alert and an email for high-priority cards and
 anything that cannot be undone, or for every card if you prefer. Set it next to **Needs you**.
 
 **You are never the bottleneck.** A reversible decision shows a 4-hour clock. If you have not
@@ -260,6 +260,7 @@ Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for 
 2. Replace HUB_URL_PLACEHOLDER in the page with the artifact's own URL and publish it again to the same URL.
 3. Store the text of cloud/PROTOCOL.md in the artifact's database: collection "config", doc "protocol", field "text".
 4. Store the text of ROLES.md the same way: collection "config", doc "roles", field "text".
+5. Create a routine named "Agent Hub alert" with no schedule, a fresh session per run and push and email notifications on. Its prompt: relay the appended message as the final answer, plus a link to the hub, without using tools. Store its trigger id in the database: collection "config", doc "alert-relay", field "trigger_id".
 Then give me the link.
 ```
 
