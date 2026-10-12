@@ -102,10 +102,10 @@ details > summary + * { margin-top: 12px; }
 .banner { background: var(--accent-tint); border-radius: var(--radius); padding: 12px 14px; margin-top: 20px; }
 
 /* Filters */
-.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
 .filters label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 select, input[type=text], textarea { font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 11px; }
-select { min-width: 150px; }
+select { min-width: 150px; max-width: 100%; }
 input[type=text] { flex: 1; min-width: 0; }
 textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .link { background: none; border: 0; color: var(--accent); padding: 6px 0; }
@@ -384,7 +384,7 @@ function violations(it) {
   if (it.type === 'delivery' && !arr(it.links).length) v.push('no link to the result');
   const text = [it.title].concat(arr(it.bullets)).join(' ');
   const hasImage = arr(it.attachments).some((a) => (typeof a === 'object' && a.kind === 'image') || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(typeof a === 'string' ? a : a.url || ''));
-  if (['question', 'approval', 'delivery'].includes(it.type) && /\b(ui|ux|layout|screen|page|button|design|header|zoom|css|mockup)\b/i.test(text) && !hasImage) v.push('UI related without a screenshot');
+  if (['question', 'approval', 'delivery'].includes(it.type) && /\b(ui|ux|layout|screens?|buttons?|design|header|zoom|css|mockups?|colou?rs?)\b/i.test(text) && !hasImage) v.push('UI related without a screenshot');
   if ((it.type === 'status' || it.type === 'delivery') && /\?/.test([it.title].concat(arr(it.bullets)).join(' '))) v.push('contains a question; questions need their own card so they reach Needs you');
   return v;
 }

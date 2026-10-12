@@ -1,45 +1,250 @@
-# Claude Agent Dashboard
+# Agent Hub for Claude Code
 
-One screen for all your Claude Code agents. Agents post progress, questions,
-approvals and finished work to the dashboard. You answer there with one click and
-never open their chats. A lead agent turns your brief into a plan, keeps every agent
-on that plan and parks new ideas until the build is done.
+**Run a team of AI agents like a company. You are the CEO.**
 
-![Dashboard](docs/dashboard.png)
+Agent Hub is one screen where all your Claude Code agents report to you. A lead agent turns
+your brief into a plan. Builders build it. Reviewers, security and QA check every task before it
+counts as done. Test agents use your app as your real customers would and report what breaks.
+You answer a question with one click, from your desk or your phone, and never open an agent's chat.
 
-Two versions:
+![Agent Hub with three projects, nine agents and the cards that need you](docs/img/hero.png)
 
-- **Artifact version (easiest).** The dashboard is a private page on claude.ai. Nothing to
-  install; works on your phone in the Claude app. Claude builds it for you.
-- **Local version.** A small server on your own computer, with instant answer delivery
-  through Claude Code hooks. Needs Node.js.
+- **One inbox for every agent.** Questions, approvals and finished work from all projects arrive
+  as short cards, each with the agent's recommendation. Approve, give feedback, ask for more or say no.
+- **A lead agent that manages the others.** It plans, splits the work, checks every agent about
+  every 30 minutes and keeps them on plan. New ideas wait in a backlog instead of creeping into the build.
+- **Nothing is done until it is checked.** Code review on every task, security on anything with
+  logins, money or personal data, QA on anything a user sees.
+- **Your customers test the app before they see it.** Describe Maria, 68, on a phone with poor
+  eyesight. An agent uses the app at 200% zoom as Maria and sends you the screenshots of where she got stuck.
+- **Nothing to install.** Claude builds the dashboard for you as a private page on claude.ai.
+  Agents run in any Claude Code session.
 
-The full guide is the [manual](docs/MANUAL.md). Teams of specialized agents (builders, code
-reviewer, security, QA, designer) are explained in the [team guide](docs/TEAMS.md).
+[Set it up in 3 steps](#set-it-up-in-3-steps) · [Read the manual](docs/MANUAL.md) · [Team guide](docs/TEAMS.md)
 
-## Features
+---
 
-- **Needs you:** questions and approvals from all agents in one list, each with the agent's
-  recommendation. Approve, give feedback (also per numbered question), ask for more info or say no.
-- **Count strip and last 24 hours:** what needs you, which agents are running, deliveries to
-  review, parked ideas, and a one-line summary per project.
-- **Lead agent per project:** turns your brief into a plan you approve, splits the work, checks
-  every agent about every 30 minutes, keeps them on plan and takes over answers nobody read.
-- **Agent teams with role cards:** builders, code reviewer, security, QA, designer, architect,
-  usertest, cleanup and docs. Presets: Solo, Standard, Product, Secure and Review.
-- **Checks before done:** every task passes code review, plus security and QA where needed.
-  Failed checks go back to the builder with the findings.
-- **Customer profiles and user tests:** describe your customers (age, IT skill, device, goals,
-  needs); a usertest agent uses the app as each of them and reports bugs with screenshots.
-- **Code audit:** security, cleanup and code review agents go through the whole codebase; you get
-  one approval card with the fixes.
-- **Across projects:** P1/P2/P3 priorities, "Message all leads", automatic releases with
-  exceptions (first go-live, data migrations and payments always ask you) and lessons carried
-  into the next project.
-- **Ideas backlog:** new ideas and unplanned features wait until the build is done.
-- **Phone friendly:** works in the Claude app, light and dark, readable at 200% zoom.
+## An example day
 
-## Artifact version
+You write a brief: "A class booking app for my gym. Members book and cancel classes on their
+phone, the owner adds classes. Payments in phase 2. Deadline: 4 weeks."
+
+```mermaid
+flowchart LR
+    You([You: brief]) --> Lead[Lead agent<br/>plan + tasks]
+    Lead -->|plan card| Hub{{Agent Hub}}
+    Hub -->|you approve| Lead
+    Lead --> B1[Builder]
+    Lead --> B2[Builder 2]
+    Lead --> D[Designer]
+    B1 & B2 --> R[Reviewer + Security]
+    R --> Q[QA]
+    Q --> Lead
+    Lead -->|delivery| Hub
+    U[User test agent<br/>as your customers] -->|bugs + screenshots| Lead
+```
+
+- **09:00** The lead posts the plan: 9 tasks, what is in, what is out. You tap **Approve**.
+- **09:05** Two builders start on separate parts. The designer posts the booking screen for approval,
+  with a screenshot and its color table.
+- **11:30** A builder needs a decision on payments. Three questions arrive as one card, each with a
+  recommendation. You reply `1 yes, 2 monthly and yearly, 3 14 days` from your phone in line at the coffee shop.
+- **13:00** The reviewer sends a task back: a member could cancel someone else's booking by changing
+  an id. The builder fixes it, security passes it, QA tests it in a browser. Only then is it done.
+- **15:00** The user test agent books a class as Maria. The time picker is too small to tap at
+  200% zoom. The lead turns it into a fix task.
+- **17:00** A delivery card arrives: the booking flow, live on a test link, with test results.
+
+You spent about ten minutes on it.
+
+---
+
+## Every decision is one card
+
+Agents never ask in a chat you have to find. Every question, approval and delivery is a card in
+**Needs you**, highest priority first, written like a note to a busy CEO: five bullets at most, a
+recommendation, and an **Approve** button.
+
+![A question card with three numbered questions, each with a recommendation](docs/img/card-question.png)
+
+Answer per number in one line. The agent gets your answer on its next step.
+
+![Feedback typed per number: 1 yes, 2 monthly and yearly, 3 14 days](docs/img/card-feedback.png)
+
+Design decisions arrive with the screenshot and a color table, so you approve what you see,
+not a description of it.
+
+![A design approval with a screenshot of the client dashboard and a table of colors](docs/img/card-design.png)
+
+| Button | What happens |
+|---|---|
+| **Approve** | The agent does what it recommended. On a numbered card, every recommendation is accepted. |
+| **Feedback** | One line of text, also per number. |
+| **More info** | The agent comes back with the missing facts. |
+| **Not approved** | The agent drops it and carries on with other work. |
+
+**You are never the bottleneck.** A reversible decision shows a 4-hour clock. If you have not
+answered by then, the agent goes with its own recommendation and tells you. Anything you cannot
+undo (deleting data, payments, publishing, production) waits for you, no exceptions.
+
+---
+
+## A real team, with real roles
+
+Each agent has one job and a written role card ([ROLES.md](ROLES.md)). Pick a team when you add a
+project, or type your own list.
+
+| Team | Agents | Use it for |
+|---|---|---|
+| **Solo** | lead, builder | Small fixes, landing pages, scripts |
+| **Standard** | lead, builder, reviewer, security | Most apps |
+| **Product** | lead, designer, 2 builders, reviewer, qa | Apps with many screens |
+| **Secure** | lead, architect, 2 builders, reviewer, security, qa | Payments, personal data, production |
+| **Review** | lead, builder, reviewer, security, cleanup, usertest | An existing app you want checked and cleaned up |
+
+| Role | What it does for you |
+|---|---|
+| **Lead** | Turns your brief into a plan, assigns tasks, checks every agent about every 30 minutes, merges the work, flags you only for decisions |
+| **Architect** | Picks the stack and data model before anyone builds, so two builders never solve the same problem two ways |
+| **Designer** | Screens, states, colors and accessibility; posts each screen for your approval before it is built |
+| **Builder** | Builds one task at a time, test first, on its own branch; runs tests, build and lint before handing over |
+| **Reviewer** | Reads the real code and runs the tests itself; the builder's summary is a claim, not evidence |
+| **Security** | A 10-point checklist: injection, logins, access control, secrets, uploads, payments, dependencies |
+| **QA** | Tests every screen from the user's side in a real browser, error cases included, with screenshots |
+| **Usertest** | Uses the app as each of your customer profiles and reports bugs, blockers and confusing spots |
+| **Cleanup** | Finds dead code, duplicates and unused packages, and proves every finding before suggesting a delete |
+| **Docs** | Keeps the README and setup steps true by running every command it documents |
+
+![The agents rail: each agent with its project, role, current task and last check-in](docs/img/agents.png)
+
+### Nothing is done until it is checked
+
+```mermaid
+flowchart LR
+    A[Builder<br/>tests, build, lint] --> B[Reviewer<br/>code]
+    A --> C[Security<br/>if logins, money, data]
+    B & C -->|pass| D[QA<br/>in a real browser]
+    D -->|pass| E[Lead marks done]
+    B & C & D -.->|fail + findings| A
+```
+
+The builder cannot mark its own work done, and no agent can check its own work. A failed check
+goes back to the same builder with the file, the line and what goes wrong. After 5 rounds on one
+task the lead asks you. Before delivery, security sweeps the whole codebase once.
+
+---
+
+## Your customers test the app before launch
+
+Most apps are tested by the people who built them. Agent Hub tests yours as the people who will
+use it.
+
+On a project card, open **Customer profiles** and describe who your customers are: name, age, IT
+skill, device, goals and needs. Then click **Run user test** or **Test with all profiles**.
+
+![The project card with three customer profiles: Maria, Tom and Aisha](docs/img/project-card.png)
+
+The test agent opens the app in a real browser and turns each profile into concrete test settings:
+
+| If the profile says | The agent tests like this |
+|---|---|
+| IT skill none or basic | Reads every screen before acting, does not recognize icons without a label, never uses shortcuts, gives up after 2 failed tries and records where |
+| IT skill advanced or expert | Moves fast: shortcuts, the back button, refresh halfway through, two tabs, odd input |
+| Age 65+ or poor eyesight | 200% browser zoom, checks contrast, text size and tap targets of at least 44px |
+| Phone | 390 by 844 screen, touch, slow connection |
+| Tablet or desktop | 820 by 1180 or 1440 by 900 |
+| Impatient | Leaves any step that takes over 5 seconds or 3 screens |
+| Another language | Notes every word that is jargon or unclear |
+
+Every finding gets a label: **bug** (becomes a fix task), **blocker** (Maria cannot finish; high
+priority), **confusing** (it works, but she got lost) or **idea** (goes to the backlog, never built
+without you). You get one short card with screenshots, and a full report lands in the repo.
+
+![User test card: Maria booked a class, but the time picker is too small at 200% zoom](docs/img/card-usertest.png)
+
+After the fix, the agent runs the same profile again and confirms it.
+
+---
+
+## A code audit by three reviewers, in one card
+
+Click **Run code audit** on any project, new or years old. Three agents go through the whole
+codebase separately:
+
+- **Security** looks for holes: injection, missing access checks, secrets, unsafe uploads.
+- **Cleanup** looks for code that should not be there: dead code, duplicates, unused packages.
+- **Reviewer** looks for bugs, slow queries and code that hides bugs.
+
+The lead checks every finding against the real code, drops duplicates and sends you one card.
+Nothing changes until you approve, except critical security holes, which are fixed at once.
+
+![Code audit card: 4 fixes, 140 lines removed, 180 KB lighter page, 9 smaller findings parked](docs/img/card-audit.png)
+
+---
+
+## Built for more than one project
+
+- **Last 24 hours** at the top: one line per project, most important first. Worked out from the
+  hub's own data, so it costs nothing.
+
+  ![Last 24 hours: gym-app 3 tasks done, 1 delivered, 2 need you](docs/img/digest.png)
+
+- **Priorities.** Mark projects P1, P2 or P3. Cards from P1 always come first.
+- **Message all leads.** One instruction to every project at once, for example "Pause all deploys
+  until Monday". Each lead passes it on to its own agents.
+
+  ![Message all leads panel](docs/img/broadcast.png)
+
+- **Automatic releases, with exceptions.** When every task is done and every check passed, the lead
+  releases on its own. The first release to real users, database changes that delete or reshape
+  data, and anything with payments always ask you first.
+- **Lessons carried forward.** After each project the lead saves up to 5 one-line lessons and
+  reads them when it plans the next one.
+- **An ideas backlog.** Good ideas from agents and test users are parked, not built. You decide later.
+- **Finished work with proof.** Deliveries come with links, test results and screenshots.
+
+  ![A delivery card with the link and test results](docs/img/card-delivery.png)
+
+---
+
+## On your phone, in light and dark
+
+The page works in the Claude app on your phone, follows your light or dark setting and stays
+readable at 200% zoom.
+
+<p>
+  <img src="docs/img/phone.png" alt="Agent Hub on a phone" width="260">
+  <img src="docs/img/phone-dark-needs.png" alt="Needs you on a phone in dark mode" width="260">
+</p>
+
+![Agent Hub in dark mode on a desktop](docs/img/hero-dark.png)
+
+---
+
+## It tested itself
+
+Before we shipped this version, we pointed Agent Hub at its own code. Real agents, real findings:
+
+- **Security, reviewer and cleanup agents** audited the codebase. Their high-severity findings came down to 5 fixes,
+  among them a way for a malicious website to reach the local server through your browser and a
+  file preview that could run code. The lead checked them, merged duplicates and sent **2 approval cards**.
+- **The fixes were verified by the same agents.** The re-test confirmed every high issue closed and
+  found one more (a symlink trick), which was then fixed too.
+- **A user test agent tested as Maria, 68, on a phone at 200% zoom.** She found that the header
+  buttons overlapped and the page scrolled sideways.
+
+  <p>
+    <img src="docs/img/maria-before.png" alt="Before: header text overlaps the buttons at 200% zoom" width="240">
+    <img src="docs/img/maria-after.png" alt="After: header and tiles readable at 200% zoom" width="240">
+  </p>
+
+- **The re-test caught a new bug the fix had caused** (a color table that wrapped one letter per
+  line). It was fixed before release. That is the point of the checks: no fix is trusted until an
+  agent other than the one who made it has tested it.
+
+---
+
+## Set it up in 3 steps
 
 **1. Let Claude build your hub.** Paste this into any Claude chat or Claude Code session:
 
@@ -52,146 +257,59 @@ Set up the Agent Hub from https://github.com/giovannibrees/Claude-Dashboard for 
 Then give me the link.
 ```
 
-**2. Add a project.** Open the link, click **Add project**, give it a name, the agents
-(`lead, builder`) and your brief. You get one start line per agent.
+You get a private link. Bookmark it, and add it to your phone's home screen.
 
-**3. Start the agents.** For each agent, open a Claude Code session on the project
-(claude.ai/code, the desktop app or a terminal), switch it to auto mode and paste its start line.
+**2. Add a project.** Click **Add project**, pick a team and paste your brief. You get one start
+line per agent.
 
-The lead writes the plan and posts it to **Needs you**. Approve it and the agents start building.
-For every other project: **Add project** on the same page and paste the new start lines.
-Nothing needs to be installed in the projects themselves.
+![The Add project form with a team, a priority and a brief](docs/img/add-project.png)
 
-## Local version
+**3. Start the agents.** For each agent, open a Claude Code session on the project (claude.ai/code,
+the desktop app or a terminal), switch it to auto mode and paste its start line.
 
-You need [Node.js](https://nodejs.org) (LTS) and [Claude Code](https://code.claude.com).
+The lead posts the plan to **Needs you** within minutes. Approve it and the team starts building.
+For the next project, click **Add project** again. One hub serves all of them.
 
-**1. Get it**
+---
 
-```bash
-git clone https://github.com/giovannibrees/Claude-Dashboard.git
-```
+## Questions
 
-**2. Start the dashboard**
+**What does it cost?**
+Agent Hub itself is free to use under the license below. The agents run on your own Claude plan.
+To keep usage down: agents stop when their work is delivered instead of waiting, reviewers wake
+only when there is something to review, and the [team guide](docs/TEAMS.md#keeping-cost-down)
+shows which roles can run on a cheaper model.
 
-Double-click **Start Dashboard.command** (Mac) or **Start Dashboard.bat** (Windows).
-Your browser opens http://localhost:4747. Keep that window open.
-If macOS refuses to open it, right-click the file and choose Open.
+**Do I need to install anything?**
+No. The dashboard is a page on claude.ai and the agents are ordinary Claude Code sessions. Your
+projects stay untouched: no files are added to them.
 
-From a terminal it is `npm start` in the folder.
+**Can agents do something I cannot undo?**
+Not without you. Deleting data, payments, publishing and anything touching production always
+wait for your approval. The 4-hour rule applies only to reversible decisions.
 
-**3. Add a project**
+**Does it work with an existing project?**
+Yes. Add it as a project with a brief that says where things stand, or start with the **Review**
+team: a code audit and user tests before anyone builds anything new.
 
-On the dashboard, open **Add project** and fill in:
+**Who can see my hub?**
+Only you. The page is private on your claude.ai account. Use its Share menu to give a colleague access.
 
-- **Project folder**: where the app should live, for example `/Users/you/Projects/gym-app`.
-  The folder is created if it does not exist.
-- **Agents**: `lead, builder` is a good start. Add `designer` or `builder-2` if you want more.
-- **Brief**: everything the app needs: what it is, who it is for, must-have features,
-  what is out of scope, deadline.
+**Can I run it on my own computer instead?**
+Yes. The repo also has a local version: a small Node server with instant answer delivery through
+Claude Code hooks. See the [manual](docs/MANUAL.md#11-the-local-version).
 
-Click **Connect project**. The dashboard shows one line per agent to paste into a
-Terminal window, and one start line to type into each Claude session. That is all.
+---
 
-### What happens next
+## Documentation
 
-1. The **lead** reads your brief, writes the plan and tasks, and posts the plan to
-   **Needs you**. Approve it, or use Feedback to change it.
-2. After approval, the agents build, task by task. They post a short status every 2 hours.
-3. When an agent needs you, a card appears in **Needs you** with the agent's recommendation.
-   Click **Approve**, **Feedback**, **More info** or **Not approved**. Your answer reaches the
-   agent automatically.
-4. Every 30 minutes the lead checks all agents: are they working, on topic, on plan,
-   handing over properly, making mistakes. It corrects them itself and only flags you when it matters.
-5. New ideas from the agents go to the **Ideas backlog**, never into the build.
-6. Finished work shows up under **Deliveries** with links and proof it was tested.
-
-### The dashboard
-
-- **Agents**: green dot = working in the last 30 minutes, gray = idle. Shows current task,
-  last status, token use, "Waiting on you" and loop warnings. **Message** sends an agent an instruction.
-- **Projects**: phase (planning, building, complete), progress bar, the plan scope and the never-list.
-- **Needs you**: questions and approvals, with a count badge (also in the browser tab title).
-  Approve on a numbered card accepts all its recommendations. Feedback can answer per number:
-  `1 yes, 2 no, 3 use option B`. Reversible decisions show a 4-hour clock: after that the agent
-  goes with its own recommendation. Irreversible ones (deleting, paying, publishing, production data)
-  always wait for you.
-- **Deliveries**, **Lead agent flags**, **Feed** (everything, newest first) and **Ideas backlog**.
-- Filters by agent, project and type.
-
-### Use it from your phone
-
-With [Tailscale](https://tailscale.com) on your computer and phone (same account):
-
-```bash
-tailscale serve --bg 4747
-```
-
-Then open `https://<your-computer>.<your-tailnet>.ts.net` on your phone (`tailscale serve status`
-shows the address) and add it to your home screen. Only devices on your tailnet can reach it.
-Stop sharing with `tailscale serve reset`.
-The server only answers requests addressed to `localhost` or a Tailscale name (`*.ts.net`). For
-another name, set `HUB_ALLOWED_HOSTS=name:port`.
-
-### Good to know
-
-- **Keeping agents running.** Agents keep going because they run inside `/loop`, which the
-  start line includes. Claude Code ends a `/loop` after 7 days; type the start line again to continue.
-- **First run of an agent.** Claude Code asks once whether you trust the project folder. Say yes,
-  otherwise it keeps asking permission for the dashboard commands.
-- **More agents in one folder** start with `HUB_AGENT=<name> claude`. The dashboard shows the exact line.
-  Agents that edit the same files a lot work better in their own folder (a git worktree).
-- **Keep the dashboard running all the time** (optional):
-  `npm i -g pm2 && pm2 start server.js --name agent-dashboard && pm2 save && pm2 startup`.
-- **Clean up** old items: `bin/hub cleanup` deletes archived items older than 30 days and logs
-  older than 90. Add `--dry-run` to see what it would delete.
-- **Connecting folders from the dashboard** is limited to folders inside your home folder; set
-  `HUB_PROJECTS_ROOT` to use another root.
-- **Private by default.** Your items, answers and logs stay in this folder and are never committed
-  (see `.gitignore`). The server only listens on your own computer.
-- **Windows.** The dashboard runs on Windows; the agent scripts need the Git Bash that Claude Code uses.
-
-### Command line (optional)
-
-Everything above works from the dashboard. If you prefer a terminal, run `npm link` once in
-this folder and you get a `hub` command:
-
-```bash
-hub start                                   # start the dashboard
-hub connect ~/Projects/gym-app --agents lead,builder --brief brief.md
-hub status                                  # projects and agents
-hub audit                                   # what the lead agent sees
-```
-
-Agents use `bin/post-item`, `bin/task`, `bin/my-inbox` and the other scripts in `bin/`.
-You never need to; they are described in [AGENT-PROTOCOL.md](AGENT-PROTOCOL.md).
-
-### How it works
-
-```
-inbox/        agents' open items (one JSON file each)
-answers/      your answers (one JSON file per answered item)
-archive/      answered, acknowledged and old items
-log/          one append-only JSONL file per day
-agents/       live state per agent (from Claude Code hooks)
-projects/     plan, scope, never-list and tasks per project
-directives/   instructions to agents from you or the lead
-```
-
-- `server.js` serves the dashboard and writes your answers. Plain Node, no packages.
-- Connecting a project writes `.hub.json`, Claude Code hooks (`.claude/settings.json`) and an
-  "Agent hub" section in the project's `CLAUDE.md`.
-- The hooks keep each agent's state live, deliver your answers into the running agent after its
-  next step, warn an agent that repeats the same command, count tokens, and tell an agent that still
-  owns an unfinished task to keep going instead of stopping.
-- [AGENT-PROTOCOL.md](AGENT-PROTOCOL.md) is the agents' rulebook: CEO-style bullets, max 5 per item,
-  batched questions with a recommendation each, screenshots for UI, color tables for colors,
-  plan-only work, the 4-hour rule, deliver and stop.
-- [LEAD-AGENT.md](LEAD-AGENT.md) is the lead's playbook: planning from the brief, the 30-minute audit,
-  reviewing work against the real code, and handling scope changes.
+- [Manual](docs/MANUAL.md): setup, daily use, every feature, troubleshooting
+- [Team guide](docs/TEAMS.md): which agents to pick, how work is split, the checks
+- [Role cards](ROLES.md): what each agent does and never does
+- [Agent rules](cloud/PROTOCOL.md): the rulebook every agent reads from the hub
 
 ## License
 
-You may use and change this software for your own or your organization's internal use.
+You may use and change Agent Hub for your own or your organization's internal use.
 Copying, redistributing, selling or offering it as a service needs written permission.
 See [LICENSE](LICENSE).
