@@ -138,7 +138,9 @@ const PROJECTS_ROOT = path.resolve(process.env.HUB_PROJECTS_ROOT || require('os'
 function connectProject(body) {
   const folder = path.resolve(String(body.folder || '').trim().replace(/^~(?=\/|$)/, require('os').homedir()));
   if (/["$`\\\n\r]/.test(String(body.folder || ''))) return [400, { error: 'The folder path cannot contain quotes, $, backticks, backslashes or line breaks.' }];
-  if (!folder.startsWith(PROJECTS_ROOT + path.sep)) return [400, { error: `Pick a folder inside ${PROJECTS_ROOT} (set HUB_PROJECTS_ROOT to change this).` }];
+  let realFolder = folder;
+  try { realFolder = fs.realpathSync(folder); } catch { /* new folder: checked by its path */ }
+  if (!folder.startsWith(PROJECTS_ROOT + path.sep) || !realFolder.startsWith(fs.realpathSync(PROJECTS_ROOT) + path.sep)) return [400, { error: `Pick a folder inside ${PROJECTS_ROOT} (set HUB_PROJECTS_ROOT to change this).` }];
   if (folder.split(path.sep).some((seg) => seg.startsWith('.'))) return [400, { error: 'Hidden folders (starting with a dot) cannot be connected.' }];
   const project = hub.slug(body.project || path.basename(folder));
   const agents = String(body.agents || 'lead,builder').split(',').map((s) => s.trim()).filter(Boolean)
@@ -195,10 +197,17 @@ const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
 const ATTACHMENT_INLINE = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
   '.pdf': 'application/pdf', '.csv': 'text/plain; charset=utf-8', '.json': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
+// An attachment is served only when an item lists it, it resolves (symlinks followed) to a file
+// inside a connected project folder or the hub, and no part of its real path is hidden (.ssh, .env, .git).
 function allowedFile(p) {
-  if (p.split(path.sep).some((seg) => seg.startsWith('.'))) return false; // never .ssh, .env, .git and the like
   const all = [...readDir(hub.DIRS.inbox), ...readDir(hub.DIRS.archive)];
-  return all.some((it) => (it.attachments || []).includes(p) || (it.links || []).includes(p));
+  if (!all.some((it) => (it.attachments || []).includes(p) || (it.links || []).includes(p))) return false;
+  let real;
+  try { real = fs.realpathSync(p); } catch { return false; }
+  if (real.split(path.sep).some((seg) => seg.startsWith('.'))) return false;
+  const roots = new Set([hub.HUB, ...hub.listProjects().map((x) => x.repo), ...readDir(hub.DIRS.agents).map((a) => a.repo)]
+    .filter(Boolean).map((r) => { try { return fs.realpathSync(r); } catch { return null; } }).filter(Boolean));
+  return [...roots].some((r) => real.startsWith(r + path.sep));
 }
 
 // Only requests addressed to this machine by a local name (or Tailscale) are answered. Stops DNS rebinding.

@@ -69,7 +69,7 @@ button:focus-visible, input:focus, select:focus, textarea:focus, summary:focus-v
 .tile:hover { border-color: var(--muted); }
 .tile b { font: 600 34px/1.1 var(--display); font-variant-numeric: tabular-nums; }
 .tile { min-width: 0; }
-.tile span { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
+.tile span { color: var(--muted); font-size: 15px; overflow-wrap: break-word; hyphens: auto; }
 .tile.hot { border-color: var(--accent); }
 .tile.hot b { color: var(--accent); }
 
@@ -112,7 +112,9 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 
 /* Cards */
 .cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
-.card { overflow-wrap: anywhere; }
+.card { overflow-wrap: break-word; }
+.card h3, .card .meta, .card li, .card p, .card .rec { overflow-wrap: anywhere; }
+.card .tablewrap { max-width: 100%; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; display: grid; gap: 10px; }
 .card.needs { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .card.closed { background: transparent; }
@@ -134,8 +136,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .evidence { font-family: var(--mono); font-size: 14px; color: var(--muted); }
 .shot img { max-width: 100%; max-height: 380px; border: 1px solid var(--line); border-radius: var(--radius); display: block; }
 .tablewrap { overflow-x: auto; }
-.colors { border-collapse: collapse; width: 100%; }
-.colors td { overflow-wrap: anywhere; }
+.colors { border-collapse: collapse; }
+.colors td, .colors th { white-space: nowrap; }
 .colors td, .colors th { text-align: left; padding: 7px 14px 7px 0; border-bottom: 1px solid var(--line); font-weight: 400; }
 .colors th { color: var(--muted); font-size: 15px; }
 .swatch { width: 30px; height: 22px; border-radius: 5px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
@@ -212,6 +214,10 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
   .card { padding: 16px; }
   .actions .btn { flex: 1 1 45%; }
   .filters select { min-width: 0; flex: 1 1 45%; }
+}
+@media (max-width: 400px) {
+  .tile { padding: 10px 10px; }
+  .tile span { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
