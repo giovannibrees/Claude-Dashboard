@@ -132,8 +132,14 @@ function act(body) {
   return [400, { error: 'unknown action' }];
 }
 
+// Folders the dashboard may connect: inside HUB_PROJECTS_ROOT (default: your home folder), never the root itself.
+const PROJECTS_ROOT = path.resolve(process.env.HUB_PROJECTS_ROOT || require('os').homedir());
+
 function connectProject(body) {
-  const folder = String(body.folder || '').trim().replace(/^~(?=\/|$)/, require('os').homedir());
+  const folder = path.resolve(String(body.folder || '').trim().replace(/^~(?=\/|$)/, require('os').homedir()));
+  if (/["$`\\\n\r]/.test(String(body.folder || ''))) return [400, { error: 'The folder path cannot contain quotes, $, backticks, backslashes or line breaks.' }];
+  if (!folder.startsWith(PROJECTS_ROOT + path.sep)) return [400, { error: `Pick a folder inside ${PROJECTS_ROOT} (set HUB_PROJECTS_ROOT to change this).` }];
+  if (folder.split(path.sep).some((seg) => seg.startsWith('.'))) return [400, { error: 'Hidden folders (starting with a dot) cannot be connected.' }];
   const project = hub.slug(body.project || path.basename(folder));
   const agents = String(body.agents || 'lead,builder').split(',').map((s) => s.trim()).filter(Boolean)
     .map((name) => ({ name, role: hub.roleOf(name) }));
@@ -184,12 +190,23 @@ function message(body) {
 // ---------- attachments: only files referenced by an item ----------
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-  '.csv': 'text/plain; charset=utf-8', '.json': 'application/json', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
-  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.pdf': 'application/pdf' };
+  '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
+// Attachments come from agents, so only inert types are shown inline. Everything else downloads as plain bytes.
+const ATTACHMENT_INLINE = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp',
+  '.pdf': 'application/pdf', '.csv': 'text/plain; charset=utf-8', '.json': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.txt': 'text/plain; charset=utf-8' };
 
 function allowedFile(p) {
+  if (p.split(path.sep).some((seg) => seg.startsWith('.'))) return false; // never .ssh, .env, .git and the like
   const all = [...readDir(hub.DIRS.inbox), ...readDir(hub.DIRS.archive)];
   return all.some((it) => (it.attachments || []).includes(p) || (it.links || []).includes(p));
+}
+
+// Only requests addressed to this machine by a local name (or Tailscale) are answered. Stops DNS rebinding.
+const ALLOWED_HOSTS = new Set([`localhost:${PORT}`, `127.0.0.1:${PORT}`, `[::1]:${PORT}`,
+  ...String(process.env.HUB_ALLOWED_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean)]);
+function hostAllowed(host) {
+  const h = String(host || '').toLowerCase();
+  return ALLOWED_HOSTS.has(h) || /^[a-z0-9-]+\.[a-z0-9-]+\.ts\.net(:\d+)?$/.test(h);
 }
 
 function send(res, code, body, type = 'application/json; charset=utf-8') {
@@ -207,12 +224,14 @@ function readBody(req) {
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+  if (!hostAllowed(req.headers.host)) return send(res, 403, { error: 'Unknown host. Open the dashboard at http://localhost:' + PORT + ' or add the name to HUB_ALLOWED_HOSTS.' });
   try {
     if (req.method === 'GET' && url.pathname === '/api/state') return send(res, 200, buildState());
     if (req.method === 'POST' && ['/api/action', '/api/message', '/api/connect', '/api/broadcast', '/api/priority'].includes(url.pathname)) {
       // Same-origin only: browsers send Origin on POST; reject other sites posting to localhost.
       const origin = req.headers.origin;
       if (origin && new URL(origin).host !== req.headers.host) return send(res, 403, { error: 'cross-origin' });
+      if (!String(req.headers['content-type'] || '').startsWith('application/json')) return send(res, 415, { error: 'JSON only' });
       const body = await readBody(req);
       const handler = { '/api/action': act, '/api/message': message, '/api/connect': connectProject, '/api/broadcast': broadcast, '/api/priority': setPriority }[url.pathname];
       const [code, out] = handler(body);
@@ -220,13 +239,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/file') {
       const p = url.searchParams.get('path') || '';
-      if (!path.isAbsolute(p) || !allowedFile(p) || !fs.existsSync(p)) return send(res, 404, { error: 'not found' });
-      return send(res, 200, fs.readFileSync(p), MIME[path.extname(p).toLowerCase()] || 'application/octet-stream');
+      if (!path.isAbsolute(p) || !allowedFile(p) || !fs.existsSync(p) || !fs.statSync(p).isFile()) return send(res, 404, { error: 'not found' });
+      const inline = ATTACHMENT_INLINE[path.extname(p).toLowerCase()];
+      res.writeHead(200, { 'Content-Type': inline || 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': 'sandbox; default-src none', ...(inline ? {} : { 'Content-Disposition': `attachment; filename="${path.basename(p).replace(/[^\w.-]/g, '_')}"` }) });
+      return res.end(fs.readFileSync(p));
     }
     if (req.method === 'GET') {
       const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       const p = path.join(PUBLIC, path.normalize(rel));
-      if (!p.startsWith(PUBLIC) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) return send(res, 404, 'not found', 'text/plain');
+      if (!p.startsWith(PUBLIC + path.sep) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) return send(res, 404, 'not found', 'text/plain');
       return send(res, 200, fs.readFileSync(p), MIME[path.extname(p)] || 'application/octet-stream');
     }
     send(res, 405, { error: 'method not allowed' });

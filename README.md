@@ -17,6 +17,28 @@ Two versions:
 The full guide is the [manual](docs/MANUAL.md). Teams of specialized agents (builders, code
 reviewer, security, QA, designer) are explained in the [team guide](docs/TEAMS.md).
 
+## Features
+
+- **Needs you:** questions and approvals from all agents in one list, each with the agent's
+  recommendation. Approve, give feedback (also per numbered question), ask for more info or say no.
+- **Count strip and last 24 hours:** what needs you, which agents are running, deliveries to
+  review, parked ideas, and a one-line summary per project.
+- **Lead agent per project:** turns your brief into a plan you approve, splits the work, checks
+  every agent about every 30 minutes, keeps them on plan and takes over answers nobody read.
+- **Agent teams with role cards:** builders, code reviewer, security, QA, designer, architect,
+  usertest, cleanup and docs. Presets: Solo, Standard, Product, Secure and Review.
+- **Checks before done:** every task passes code review, plus security and QA where needed.
+  Failed checks go back to the builder with the findings.
+- **Customer profiles and user tests:** describe your customers (age, IT skill, device, goals,
+  needs); a usertest agent uses the app as each of them and reports bugs with screenshots.
+- **Code audit:** security, cleanup and code review agents go through the whole codebase; you get
+  one approval card with the fixes.
+- **Across projects:** P1/P2/P3 priorities, "Message all leads", automatic releases with
+  exceptions (first go-live, data migrations and payments always ask you) and lessons carried
+  into the next project.
+- **Ideas backlog:** new ideas and unplanned features wait until the build is done.
+- **Phone friendly:** works in the Claude app, light and dark, readable at 200% zoom.
+
 ## Artifact version
 
 **1. Let Claude build your hub.** Paste this into any Claude chat or Claude Code session:
@@ -108,6 +130,8 @@ tailscale serve --bg 4747
 Then open `https://<your-computer>.<your-tailnet>.ts.net` on your phone (`tailscale serve status`
 shows the address) and add it to your home screen. Only devices on your tailnet can reach it.
 Stop sharing with `tailscale serve reset`.
+The server only answers requests addressed to `localhost` or a Tailscale name (`*.ts.net`). For
+another name, set `HUB_ALLOWED_HOSTS=name:port`.
 
 ### Good to know
 
@@ -121,6 +145,8 @@ Stop sharing with `tailscale serve reset`.
   `npm i -g pm2 && pm2 start server.js --name agent-dashboard && pm2 save && pm2 startup`.
 - **Clean up** old items: `bin/hub cleanup` deletes archived items older than 30 days and logs
   older than 90. Add `--dry-run` to see what it would delete.
+- **Connecting folders from the dashboard** is limited to folders inside your home folder; set
+  `HUB_PROJECTS_ROOT` to use another root.
 - **Private by default.** Your items, answers and logs stay in this folder and are never committed
   (see `.gitignore`). The server only listens on your own computer.
 - **Windows.** The dashboard runs on Windows; the agent scripts need the Git Bash that Claude Code uses.
@@ -166,4 +192,6 @@ directives/   instructions to agents from you or the lead
 
 ## License
 
-Source available, all rights reserved. See [LICENSE](LICENSE).
+You may use and change this software for your own or your organization's internal use.
+Copying, redistributing, selling or offering it as a service needs written permission.
+See [LICENSE](LICENSE).
