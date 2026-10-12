@@ -273,7 +273,7 @@ Then give me the link.
 
 You get a private link. Bookmark it, and add it to your phone's home screen.
 
-**2. Add a project.** Click **Add project**, pick a team and paste your brief. You get one start
+**2. Add a project.** Click **Add project**, pick a team and paste your brief, or let **Help me write the brief** write it from five short questions. You get one start
 line per agent.
 
 ![The Add project form with a team, a priority and a brief](docs/img/add-project.png)

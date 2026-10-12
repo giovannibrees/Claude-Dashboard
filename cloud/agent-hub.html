@@ -170,6 +170,10 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .ci::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--idle); }
 .ci.pass { color: var(--ok); } .ci.pass::before { background: var(--ok); }
 .ci.fail { color: var(--error); } .ci.fail::before { background: var(--error); }
+.brief-help summary { cursor: pointer; color: var(--accent); }
+.brief-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); }
+.brief-grid .full { grid-column: 1 / -1; }
+@media (max-width: 600px) { .brief-grid { grid-template-columns: minmax(0, 1fr); } }
 .agent-links { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; }
 .agent-links a { color: var(--accent); }
 .cloud-start { display: grid; gap: 10px; justify-items: start; margin-block: 8px 16px; }
@@ -290,6 +294,17 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
       <label for="f-agents">Agents (edit to customize) <input type="text" id="f-agents" value="lead, builder, reviewer, security" placeholder="lead, builder, reviewer, security"></label>
       <label for="f-priority">Priority <select id="f-priority"><option value="P1">P1, most important</option><option value="P2" selected>P2, normal</option><option value="P3">P3, when there is time</option></select></label>
       <label for="f-repo" class="full">GitHub repo or folder (optional) <input type="text" id="f-repo" placeholder="github.com/you/gym-app or /Users/you/Projects/gym-app"></label>
+      <details class="full brief-help" id="brief-help"><summary>Help me write the brief</summary>
+        <div class="brief-grid">
+          <label for="b-what" class="full">What is it? <input type="text" id="b-what" placeholder="A class booking app for my gym"></label>
+          <label for="b-who" class="full">Who uses it? <input type="text" id="b-who" placeholder="Members, many over 60, mostly on phones; the owner adds classes"></label>
+          <label for="b-must" class="full">Must have (one per line) <textarea id="b-must" rows="3" placeholder="Members book and cancel classes&#10;Owner adds and edits classes&#10;Reminder email the day before"></textarea></label>
+          <label for="b-out" class="full">Not now (out of scope) <input type="text" id="b-out" placeholder="Payments, a native app, chat"></label>
+          <label for="b-deadline">Deadline <input type="text" id="b-deadline" placeholder="4 weeks"></label>
+          <label for="b-where">Where it runs (optional) <input type="text" id="b-where" placeholder="Cloudflare, Vercel, App Store"></label>
+          <div class="full"><button type="button" class="btn" id="b-write">Write the brief</button> <span class="hint" id="b-msg" role="status"></span></div>
+        </div>
+      </details>
       <label for="f-brief" class="full">Brief <textarea id="f-brief" rows="7" required placeholder="What the app is, who it is for, must-have features, what is out of scope, deadline. The lead agent turns this into a plan and asks you to approve it."></textarea></label>
       <div class="actions full"><button class="btn primary" type="submit" id="f-submit">Create project</button><button class="btn" type="button" id="add-cancel">Cancel</button></div>
       <p class="error full" id="add-error" hidden></p>
@@ -470,8 +485,28 @@ function startMessage(e) {
 }
 
 function githubRepo(repo) {
-  const m = String(repo || '').trim().match(/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/);
-  return m ? m[0].replace(/\.git$/, '') : '';
+  const m = String(repo || '').trim().match(/^(?:https:\/\/)?(?:www\.)?github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/);
+  return m ? `https://github.com/${m[1]}/${m[2].replace(/\.git$/, '')}` : '';
+}
+
+// Brief helper: five short questions become a brief the lead can plan from.
+function writeBrief() {
+  const v = (id) => document.getElementById(id).value.trim();
+  const what = v('b-what'); const who = v('b-who'); const out = v('b-out'); const deadline = v('b-deadline'); const where = v('b-where');
+  const must = v('b-must').split('\n').map((x) => x.replace(/^[-*\s]+/, '').trim()).filter(Boolean);
+  const missing = [!what && 'what it is', !who && 'who uses it', !must.length && 'must-haves', !out && 'what is out of scope', !deadline && 'the deadline'].filter(Boolean);
+  const lines = [];
+  if (what) lines.push(what, '');
+  if (who) lines.push(`Who: ${who}`);
+  if (must.length) lines.push('Must have:', ...must.map((x) => `- ${x}`));
+  if (out) lines.push(`Out of scope for now: ${out}`);
+  if (deadline) lines.push(`Deadline: ${deadline}`);
+  if (where) lines.push(`Runs on: ${where}`);
+  const brief = document.getElementById('f-brief');
+  if (lines.length) brief.value = lines.join('\n').trim();
+  document.getElementById('b-msg').textContent = missing.length
+    ? `Brief written. Still missing: ${missing.join(', ')}. The lead will ask about these.`
+    : 'Brief written. Check it below, then create the project.';
 }
 
 async function startAgent(agent) {
@@ -1095,6 +1130,7 @@ document.addEventListener('click', async (e) => {
     t.disabled = !!started && !failed.length;
     return;
   }
+  if (t.id === 'b-write') { writeBrief(); return; }
   if (t.id === 'perm-fix') {
     const banner = document.getElementById('perm');
     try {

@@ -95,7 +95,11 @@ them to run agents on your own computer:
 
 ### Write a brief the lead can plan from
 
-The brief is the one thing only you can write. A good one takes five minutes:
+Click **Help me write the brief** in the Add project form and answer five short questions: what
+it is, who uses it, the must-haves, what is out of scope and the deadline. **Write the brief**
+turns them into the brief and tells you what is still missing.
+
+The brief is the one thing only you can write. A good one takes five minutes, for example:
 
 ```text
 A class booking app for my gym, FitClub.
