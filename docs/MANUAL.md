@@ -32,6 +32,11 @@ every part of it.
 
 ---
 
+Want to look around first? The [demo hub](https://claude.ai/artifact/9mGDgzk2MaJXm4EzJMg74A) has
+sample projects, agents and cards. It is built from `demo/` in this repo (`python3 demo/build.py`).
+
+---
+
 ## 2. Set up your hub
 
 You do not need to copy any files. Paste this into any Claude chat or Claude Code session that

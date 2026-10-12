@@ -22,6 +22,9 @@ You answer a question with one click, from your desk or your phone, and never op
 
 [Set it up in 3 steps](#set-it-up-in-3-steps) · [Read the manual](docs/MANUAL.md) · [Team guide](docs/TEAMS.md)
 
+**Try it first:** the [demo hub](https://claude.ai/artifact/9mGDgzk2MaJXm4EzJMg74A) runs with sample
+projects and agents. Approve cards, start agents, set a budget: nothing is saved.
+
 ---
 
 ## An example day

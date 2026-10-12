@@ -248,6 +248,7 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 
 <main class="wrap">
   <p class="banner" id="offline" hidden>This page needs its database to work. Open it from claude.ai while signed in.</p>
+  <p class="banner demo" id="demo-banner" hidden>Demo with sample data: click anything, nothing is saved. <a href="https://github.com/giovannibrees/Claude-Dashboard" target="_blank" rel="noopener">Get your own Agent Hub</a></p>
   <p class="banner" id="perm" hidden>Your answers cannot be saved: this page is not allowed to save to its database. <button type="button" class="btn" id="perm-fix">Allow saving</button></p>
 
   <nav class="strip" aria-label="Summary">
@@ -359,6 +360,11 @@ const MEANING = {
 };
 
 let db = null;
+// The demo page (demo/) defines window.HUB_DEMO with an in-memory database and sample data.
+function useCap(name) {
+  if (window.HUB_DEMO) return window.HUB_DEMO.use(name);
+  return window.claude && window.claude.use ? window.claude.use(name) : Promise.resolve(null);
+}
 const S = { items: [], agents: [], projects: [], tasks: [], unread: [], personas: [] };
 const openDetails = new Set(); // details sections the viewer opened, kept open across re-renders
 const pfDrafts = {};            // customer profile form drafts per project
@@ -711,7 +717,12 @@ function bulletsHtml(it) {
   return b.every((x) => /^\s*\d+[.)]\s/.test(x)) ? `<ol>${b.map((x) => `<li>${esc(strip(x))}</li>`).join('')}</ol>` : `<ul>${b.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
 }
 
-function safeUrl(u) { const s = String(u || ''); return /^(https?:\/\/|\/_blob\/)/.test(s) ? s : ''; }
+function safeUrl(u) {
+  const s = String(u || '');
+  if (/^(https?:\/\/|\/_blob\/)/.test(s)) return s;
+  // Only the demo page embeds its sample screenshots; the live hub never accepts data URLs.
+  return window.HUB_DEMO && /^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(s) ? s : '';
+}
 
 function attachmentsHtml(it) {
   const out = [];
@@ -897,7 +908,7 @@ async function act(id, action, text) {
 // is really in this page's manifest before offering one-click start.
 async function initCloud() {
   try {
-    const m = await window.claude.use('mcp');
+    const m = await useCap('mcp');
     if (!m) return;
     const r = await m.listTools(CC);
     const srv = (r.servers || []).find((x) => x.server === CC);
@@ -911,7 +922,7 @@ async function initCloud() {
 let perms = null;
 function showPermBanner() { document.getElementById('perm').hidden = false; }
 async function checkPerms() {
-  try { perms = await window.claude.use('permissions'); } catch (e) { perms = null; }
+  try { perms = await useCap('permissions'); } catch (e) { perms = null; }
   if (!perms) return;
   try { if ((await perms.state('db')) === 'denied') showPermBanner(); } catch (e) { /* state never rejects */ }
 }
@@ -1180,7 +1191,8 @@ function subscribe(path, key, query) {
 }
 
 (async () => {
-  try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+  if (window.HUB_DEMO) document.getElementById('demo-banner').hidden = false;
+  try { db = await useCap('db'); } catch (e) { db = null; }
   if (!db) {
     document.getElementById('offline').hidden = false;
     document.getElementById('refreshed').textContent = 'Offline';
