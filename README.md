@@ -229,10 +229,9 @@ readable at 200% zoom.
 Before we shipped this version, we pointed Agent Hub at its own code. Real agents, real findings:
 
 - **Security, reviewer and cleanup agents** audited the codebase. Their high-severity findings came down to 5 fixes,
-  among them a way for a malicious website to reach the local server through your browser and a
-  file preview that could run code. The lead checked them, merged duplicates and sent **2 approval cards**.
+  among them old open cards dropping out of **Needs you** and saved filters hiding decisions. The lead checked them, merged duplicates and sent **2 approval cards**.
 - **The fixes were verified by the same agents.** The re-test confirmed every high issue closed and
-  found one more (a symlink trick), which was then fixed too.
+  found one more, which was then fixed too.
 - **A user test agent tested as Maria, 68, on a phone at 200% zoom.** She found that the header
   buttons overlapped and the page scrolled sideways.
 
@@ -304,10 +303,6 @@ team: a code audit and user tests before anyone builds anything new.
 
 **Who can see my hub?**
 Only you. The page is private on your claude.ai account. Use its Share menu to give a colleague access.
-
-**Can I run it on my own computer instead?**
-Yes. The repo also has a local version: a small Node server with instant answer delivery through
-Claude Code hooks. See the [manual](docs/MANUAL.md#11-the-local-version).
 
 ---
 

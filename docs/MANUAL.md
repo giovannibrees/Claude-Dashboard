@@ -9,7 +9,7 @@ every part of it.
 
 ## Contents
 
-1. [Pick a version](#1-pick-a-version)
+1. [What you need](#1-what-you-need)
 2. [Set up your hub](#2-set-up-your-hub)
 3. [Start a project](#3-start-a-project)
 4. [Use it in your other Claude Code projects](#4-use-it-in-your-other-claude-code-projects)
@@ -19,23 +19,16 @@ every part of it.
 8. [Code audit](#8-code-audit)
 9. [Running several projects](#9-running-several-projects)
 10. [How it works and the rules agents follow](#10-how-it-works-and-the-rules-agents-follow)
-11. [The local version](#11-the-local-version)
-12. [Troubleshooting](#12-troubleshooting)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
-## 1. Pick a version
+## 1. What you need
 
-| | Artifact version (recommended) | Local version |
-|---|---|---|
-| Where the dashboard lives | A private page on claude.ai | A small server on your computer |
-| Install | Nothing. Claude builds it for you | Node.js, then double-click a launcher |
-| Phone | Open the link in the Claude app or browser | Needs Tailscale |
-| Agents | Any Claude Code session: claude.ai/code, desktop app or terminal | Claude Code on the same computer |
-| Answers reach agents | On the agent's next loop check | Automatically on the agent's next step (hooks) |
-| Customer profiles and code audit buttons | Yes | Not yet |
-
-Pick the artifact version unless you need your data to stay on your own computer.
+- A claude.ai account with Claude Code (claude.ai/code). The hub is a private page on claude.ai,
+  so there is nothing to install.
+- A GitHub repo per project, if you want the agents to start in the cloud with one click.
+- The Claude app on your phone, if you want alerts and to answer on the go.
 
 ---
 
@@ -503,44 +496,7 @@ The full rules are in [cloud/PROTOCOL.md](../cloud/PROTOCOL.md). In short:
 
 ---
 
-## 11. The local version
-
-The repo also contains a local version that runs on your own computer. It delivers your answers to
-agents instantly through Claude Code hooks and works without claude.ai. It has the core features
-(Needs you, lead agent, teams, checks, broadcast, priorities, releases and the 24-hour digest) but
-not yet the customer profile and code audit buttons.
-
-You need [Node.js](https://nodejs.org) (LTS) and [Claude Code](https://code.claude.com).
-
-1. `git clone https://github.com/giovannibrees/Claude-Dashboard.git`
-2. Double-click **Start Dashboard.command** (Mac) or **Start Dashboard.bat** (Windows), or run
-   `npm start`. Your browser opens http://localhost:4747.
-3. **Add project**: the project folder, the agents and the brief. Click **Connect project** and
-   paste the lines it shows into a terminal and into each Claude session.
-
-### Good to know
-
-- **Phone access** with [Tailscale](https://tailscale.com): `tailscale serve --bg 4747`, then open
-  `https://<your-computer>.<your-tailnet>.ts.net`. The server only answers requests addressed to
-  `localhost` or a Tailscale name; set `HUB_ALLOWED_HOSTS=name:port` for another name.
-- **Folders** you connect from the dashboard must be inside your home folder; set
-  `HUB_PROJECTS_ROOT` to use another root.
-- **Loops** end after 7 days in Claude Code; type the start line again to continue.
-- **Several agents in one folder** start with `HUB_AGENT=<name> claude`. Agents that edit the same
-  files work better in their own git worktree.
-- **Keep it running**: `npm i -g pm2 && pm2 start server.js --name agent-dashboard && pm2 save && pm2 startup`.
-- **Clean up**: `bin/hub cleanup` deletes archived items older than 30 days and logs older than 90
-  (`--dry-run` to preview).
-- **Private by default**: items, answers and logs stay in the folder and are never committed.
-- **Command line**: `npm link` once gives you `hub start`, `hub connect`, `hub status` and `hub audit`.
-- **Windows**: the dashboard runs on Windows; the agent scripts need the Git Bash that Claude Code uses.
-
-Agents use the scripts in `bin/`; they are described in [AGENT-PROTOCOL.md](../AGENT-PROTOCOL.md).
-The lead's playbook is [LEAD-AGENT.md](../LEAD-AGENT.md).
-
----
-
-## 12. Troubleshooting
+## 11. Troubleshooting
 
 | Problem | Fix |
 |---|---|

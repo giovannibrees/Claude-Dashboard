@@ -1,7 +1,7 @@
 # Agent roles
 
 Every agent has one role. Read your own card and follow it together with the hub protocol.
-Your role is in your start line (artifact version) or in `.hub.json` (local version).
+Your role is in your start line.
 
 Common to all roles:
 - Do only your role's work. Anything else goes to the lead with a short status or question.
