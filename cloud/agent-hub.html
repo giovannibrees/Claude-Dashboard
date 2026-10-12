@@ -68,7 +68,8 @@ button:focus-visible, input:focus, select:focus, textarea:focus, summary:focus-v
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; text-align: left; display: grid; gap: 2px; }
 .tile:hover { border-color: var(--muted); }
 .tile b { font: 600 34px/1.1 var(--display); font-variant-numeric: tabular-nums; }
-.tile span { color: var(--muted); font-size: 15px; }
+.tile { min-width: 0; }
+.tile span { color: var(--muted); font-size: 15px; overflow-wrap: anywhere; }
 .tile.hot { border-color: var(--accent); }
 .tile.hot b { color: var(--accent); }
 
@@ -110,7 +111,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .link { background: none; border: 0; color: var(--accent); padding: 6px 0; }
 
 /* Cards */
-.cards { display: grid; gap: 12px; }
+.cards { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.card { overflow-wrap: anywhere; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; display: grid; gap: 10px; }
 .card.needs { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .card.closed { background: transparent; }
@@ -132,7 +134,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .evidence { font-family: var(--mono); font-size: 14px; color: var(--muted); }
 .shot img { max-width: 100%; max-height: 380px; border: 1px solid var(--line); border-radius: var(--radius); display: block; }
 .tablewrap { overflow-x: auto; }
-.colors { border-collapse: collapse; min-width: 360px; }
+.colors { border-collapse: collapse; width: 100%; }
+.colors td { overflow-wrap: anywhere; }
 .colors td, .colors th { text-align: left; padding: 7px 14px 7px 0; border-bottom: 1px solid var(--line); font-weight: 400; }
 .colors th { color: var(--muted); font-size: 15px; }
 .swatch { width: 30px; height: 22px; border-radius: 5px; border: 1px solid var(--line); display: inline-block; vertical-align: middle; }
@@ -151,7 +154,8 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
 .crew { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .agent { padding: 12px 14px; border-top: 1px solid var(--line); display: grid; gap: 3px; min-width: 0; }
 .agent:first-child { border-top: 0; }
-.agent-top { display: flex; align-items: center; gap: 8px; }
+.agent-top { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; }
+.maincol, .rail { min-width: 0; }
 .agent-name { font-weight: 600; background: none; border: 0; padding: 0; text-align: left; }
 .agent-name:hover { color: var(--accent); }
 .agent-when { margin-left: auto; color: var(--muted); font-size: 14px; white-space: nowrap; }
@@ -198,6 +202,10 @@ textarea { width: 100%; resize: vertical; line-height: 1.5; }
   .rail { position: static; }
 }
 @media (max-width: 600px) {
+  .top { position: static; }
+  .top-row { flex-wrap: wrap; row-gap: 8px; }
+  .top-actions { width: 100%; }
+  .top-actions .btn { flex: 1 1 0; min-width: 0; white-space: normal; }
   .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
   .tile b { font-size: 28px; }
   .form { grid-template-columns: minmax(0, 1fr); }
@@ -368,6 +376,9 @@ function violations(it) {
   if ((it.type === 'question' || it.type === 'approval') && typeof it.reversible !== 'boolean') v.push('reversible not set');
   if (it.type === 'delivery' && !arr(it.verification).length) v.push('no test evidence');
   if (it.type === 'delivery' && !arr(it.links).length) v.push('no link to the result');
+  const text = [it.title].concat(arr(it.bullets)).join(' ');
+  const hasImage = arr(it.attachments).some((a) => (typeof a === 'object' && a.kind === 'image') || /\.(png|jpe?g|gif|webp)(\?|$)/i.test(typeof a === 'string' ? a : a.url || ''));
+  if (['question', 'approval', 'delivery'].includes(it.type) && /\b(ui|ux|layout|screen|page|button|design|header|zoom|css|mockup)\b/i.test(text) && !hasImage) v.push('UI related without a screenshot');
   if ((it.type === 'status' || it.type === 'delivery') && /\?/.test([it.title].concat(arr(it.bullets)).join(' '))) v.push('contains a question; questions need their own card so they reach Needs you');
   return v;
 }
@@ -510,6 +521,10 @@ function renderProjects() {
 function renderFilters() {
   const agents = [...new Set(S.items.map((i) => i.agent).concat(S.agents.map((a) => a.agent)))].filter(Boolean).sort();
   const projects = [...new Set(S.items.map((i) => i.project).concat(S.projects.map((p) => p.name)))].filter(Boolean).sort();
+  let changed = false;
+  if (filters.agent && !agents.includes(filters.agent)) { filters.agent = ''; changed = true; }
+  if (filters.project && !projects.includes(filters.project)) { filters.project = ''; changed = true; }
+  if (changed) saveFilters();
   const opt = (id, values, label, cur) => {
     document.getElementById(id).innerHTML = `<option value="">All ${label}</option>` + values.map((v) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(TYPE_LABEL[v] || v)}</option>`).join('');
   };
@@ -605,13 +620,14 @@ function render() {
 
   renderFilters(); renderAgents(); renderProjects(); renderDigest();
   const items = S.items.filter(passes);
-  const needs = items.filter((i) => i.needs_me && i.status === 'open').sort((x, y) =>
+  const allItems = S.items; // Needs you, deliveries, flags and ideas are never hidden by filters
+  const needs = allItems.filter((i) => i.needs_me && i.status === 'open').sort((x, y) =>
     (PRIO_RANK[projectPrio(x.project)] - PRIO_RANK[projectPrio(y.project)])
     || ((x.priority === 'high' ? 0 : 1) - (y.priority === 'high' ? 0 : 1))
     || (ms(x.timestamp) - ms(y.timestamp)));
-  const deliveries = items.filter((i) => i.type === 'delivery' && i.status === 'open');
-  const flags = items.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info');
-  const ideas = items.filter((i) => i.type === 'idea' && ['parked', 'kept'].includes(i.status));
+  const deliveries = allItems.filter((i) => i.type === 'delivery' && i.status === 'open');
+  const flags = allItems.filter((i) => i.type === 'audit' && i.priority === 'high' && i.status === 'info');
+  const ideas = allItems.filter((i) => i.type === 'idea' && ['parked', 'kept'].includes(i.status));
   const used = new Set([...needs, ...deliveries, ...flags, ...ideas].map((i) => i.id));
   const feed = items.filter((i) => !used.has(i.id) && i.type !== 'idea');
 
@@ -892,10 +908,20 @@ document.getElementById('filters').addEventListener('change', (e) => {
 
 // ---------- data ----------
 
+// Items come from three queries so nothing open can fall out of view: the newest items (feed),
+// every open/parked item (Needs you, deliveries, ideas) and audit items (lead flags).
+const ITEM_KEYS = ['recentItems', 'openItems', 'auditItems'];
+function mergeItems() {
+  const byId = new Map();
+  for (const k of ITEM_KEYS) for (const it of S[k] || []) byId.set(it.id, it);
+  S.items = [...byId.values()].sort((a, b) => ms(b.timestamp) - ms(a.timestamp));
+}
+
 function subscribe(path, key, query) {
   const q = query(db.collection(path));
   q.onSnapshot((snap) => {
     S[key] = snap.docs.map((d) => Object.assign({ id: d.id }, d.data()));
+    if (ITEM_KEYS.includes(key)) mergeItems();
     render();
   }, () => { const l = document.getElementById('refreshed'); l.classList.add('off'); l.textContent = 'Connection lost. Reload the page.'; });
 }
@@ -908,7 +934,9 @@ function subscribe(path, key, query) {
     return;
   }
   db.collection('projects').limit(1).get().then((q) => { if (q.empty) document.getElementById('add-panel').hidden = false; }).catch(() => {});
-  subscribe('items', 'items', (c) => c.orderBy('timestamp', 'desc').limit(400));
+  subscribe('items', 'recentItems', (c) => c.orderBy('timestamp', 'desc').limit(300));
+  subscribe('items', 'openItems', (c) => c.where('status', 'in', ['open', 'parked', 'kept']).limit(1000));
+  subscribe('items', 'auditItems', (c) => c.where('type', '==', 'audit').limit(200));
   subscribe('agents', 'agents', (c) => c.limit(200));
   subscribe('projects', 'projects', (c) => c.limit(100));
   subscribe('tasks', 'tasks', (c) => c.limit(1000));

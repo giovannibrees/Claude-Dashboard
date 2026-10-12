@@ -36,6 +36,9 @@ block work. Roles: lead, architect, designer, builder, reviewer, security, qa, u
    and wait until the build is complete. Never build them on the side.
 9. Post a status item at least every 2 hours while working.
 10. Directives from the CEO or the lead are binding.
+11. The hub is the only channel. Reach another agent with a `directives` document; there is no
+    other messaging tool between agents. Anything about a screen or layout (bugs included) carries
+    a screenshot, also in the lead's approval cards.
 
 ## 2. Every loop iteration
 
